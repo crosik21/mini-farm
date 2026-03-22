@@ -37,6 +37,7 @@ export const farmStateTable = pgTable("farm_states", {
   weatherUpdatedAt: timestamp("weather_updated_at").notNull().defaultNow(),
   fishInventory: jsonb("fish_inventory").$type<Record<string, number>>(),
   toolTiers: jsonb("tool_tiers").$type<ToolTiers>(),
+  pets: jsonb("pets").$type<PetsInventory>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -77,6 +78,16 @@ export type ItemInventory = {
 export type ToolTiers = {
   watering_can: 0 | 1 | 2;
   sprinkler: 0 | 1 | 2;
+};
+
+export type PetEntry = {
+  type: string;
+  obtainedAt: string;
+  source: string;
+};
+
+export type PetsInventory = {
+  owned: PetEntry[];
 };
 
 export type ActiveSprinkler = {

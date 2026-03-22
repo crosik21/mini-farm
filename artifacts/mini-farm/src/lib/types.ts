@@ -299,6 +299,7 @@ export interface FarmData {
   toolTiers: ToolTiers;
   toolTierConfig: Record<"watering_can" | "sprinkler", ToolTierDef[]>;
   farmPass: FarmPass | null;
+  pets: PetsInventory;
   updatedAt: string;
 }
 
@@ -317,6 +318,16 @@ export type ToolTierDef = {
 export type ToolTiers = {
   watering_can: 0 | 1 | 2;
   sprinkler: 0 | 1 | 2;
+};
+
+export type PetEntry = {
+  type: string;
+  obtainedAt: string;
+  source: string;
+};
+
+export type PetsInventory = {
+  owned: PetEntry[];
 };
 
 export type PassReward = {

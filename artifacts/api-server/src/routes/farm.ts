@@ -23,6 +23,8 @@ import {
   type Achievement,
   type ToolTiers,
   type FarmPass,
+  type PetsInventory,
+  type PetEntry,
 } from "@workspace/db";
 import { eq, and, inArray, sql } from "drizzle-orm";
 import { getAdminConfig, saveAdminConfig, DEFAULT_SHOP_GLOBAL, type SeasonalEventDef } from "../admin-config";
@@ -1948,7 +1950,8 @@ router.post("/:telegramId/action", async (req, res) => {
 
       const farmOutStreak = serializeFarm({ ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, streakRewardDay: 0, loginStreak: farm.loginStreak, lastLoginDate: farm.lastLoginDate }, telegramId);
       const playerAchsStreak = await getPlayerAchievements(telegramId);
-      return res.json({ ...farmOutStreak, achievements: buildAchievementsResponse(playerAchsStreak) });
+      const streakPassData = await getOrCreateFarmPass(telegramId);
+      return res.json({ ...farmOutStreak, farmPass: serializeFarmPass(streakPassData), achievements: buildAchievementsResponse(playerAchsStreak) });
 
     // ── CLAIM ACHIEVEMENT ───────────────────────────────────────────────────────
     } else if (action === "claim_achievement") {
@@ -2011,7 +2014,8 @@ router.post("/:telegramId/action", async (req, res) => {
 
       const farmOutAch = serializeFarm({ ...farm, plots, coins, gems, xp, level: levelAch, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId }, telegramId);
       const playerAchsAch = await getPlayerAchievements(telegramId);
-      return res.json({ ...farmOutAch, achievements: buildAchievementsResponse(playerAchsAch) });
+      const achPassData = await getOrCreateFarmPass(telegramId);
+      return res.json({ ...farmOutAch, farmPass: serializeFarmPass(achPassData), achievements: buildAchievementsResponse(playerAchsAch) });
 
     // ── BUY EVENT CROP SEED ────────────────────────────────────────────────────
     } else if (action === "buy_event_crop_seed") {
@@ -2114,11 +2118,17 @@ router.post("/:telegramId/action", async (req, res) => {
 
       const { seasonId: claimSeasonId } = getCurrentPassSeason();
 
+      worlds[activeWorldId] = { ...(worlds[activeWorldId] || { unlocked: true }), plots };
+      const claimLevel = getLevelFromXp(xp);
+      if (claimLevel > farm.level) maxEnergy = Math.min(60, 30 + claimLevel * 2);
+
       const passClaimResult = await db.transaction(async (tx) => {
+        // Lock farm pass row for update
         const [pass] = await tx
           .select()
           .from(farmPassTable)
-          .where(and(eq(farmPassTable.telegramId, telegramId), eq(farmPassTable.passSeasonId, claimSeasonId)));
+          .where(and(eq(farmPassTable.telegramId, telegramId), eq(farmPassTable.passSeasonId, claimSeasonId)))
+          .for("update");
 
         if (!pass) return { status: "no_pass" as const };
         if (pass.level < passLevel) return { status: "not_reached" as const };
@@ -2143,7 +2153,34 @@ router.post("/:telegramId/action", async (req, res) => {
           .where(eq(farmPassTable.id, pass.id))
           .returning();
 
-        return { status: "ok" as const, rewardDef, updatedPass };
+        // Compute new farm values from reward
+        let newCoins = coins;
+        let newGems = gems;
+        const newSeeds = { ...seeds };
+        const currentPets = (farm.pets as PetsInventory | null) ?? { owned: [] };
+        const newPets: PetsInventory = { owned: [...currentPets.owned] };
+
+        if (rewardDef.type === "coins" && rewardDef.amount) newCoins += rewardDef.amount;
+        if (rewardDef.type === "gems" && rewardDef.amount) newGems += rewardDef.amount;
+        if (rewardDef.type === "seeds" && rewardDef.seedType && rewardDef.seedQty) {
+          newSeeds[rewardDef.seedType as keyof CropInventory] = ((newSeeds[rewardDef.seedType as keyof CropInventory] as number) ?? 0) + rewardDef.seedQty;
+        }
+        if (rewardDef.type === "pet" && rewardDef.petType) {
+          const already = newPets.owned.some((p) => p.type === rewardDef.petType);
+          if (!already) {
+            newPets.owned.push({ type: rewardDef.petType!, obtainedAt: new Date().toISOString(), source: "farm_pass" });
+          }
+        }
+
+        // Apply reward and farm state in the same transaction
+        await tx.update(farmStateTable).set({
+          plots, coins: newCoins, gems: newGems, xp, level: claimLevel, energy, maxEnergy,
+          animals, buildings, products, inventory, seeds: newSeeds,
+          quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, eventCoins, toolTiers, pets: newPets,
+          updatedAt: new Date(),
+        }).where(eq(farmStateTable.telegramId, telegramId));
+
+        return { status: "ok" as const, rewardDef, updatedPass, newCoins, newGems, newSeeds, newPets };
       });
 
       if (passClaimResult.status === "no_pass") return res.status(400).json({ error: "Пасс не найден" });
@@ -2151,30 +2188,11 @@ router.post("/:telegramId/action", async (req, res) => {
       if (passClaimResult.status === "not_premium") return res.status(400).json({ error: "Необходим платный пасс" });
       if (passClaimResult.status === "already_claimed") return res.status(409).json({ error: "Награда уже получена" });
 
-      const { rewardDef } = passClaimResult;
-      if (rewardDef.type === "coins" && rewardDef.amount) coins += rewardDef.amount;
-      if (rewardDef.type === "gems" && rewardDef.amount) gems += rewardDef.amount;
-      if (rewardDef.type === "seeds" && rewardDef.seedType && rewardDef.seedQty) {
-        seeds[rewardDef.seedType as keyof CropInventory] = ((seeds[rewardDef.seedType as keyof CropInventory] as number) ?? 0) + rewardDef.seedQty;
-      }
-      if (rewardDef.type === "pet") {
-        // Unicorn pet reward — grant 1 dragon_fruit seed + 30 gems as exclusive bonus
-        seeds["dragon_fruit" as keyof CropInventory] = ((seeds["dragon_fruit" as keyof CropInventory] as number) ?? 0) + 1;
-        gems += 30;
-      }
-
-      worlds[activeWorldId] = { ...(worlds[activeWorldId] || { unlocked: true }), plots };
-      const level = getLevelFromXp(xp);
-      if (level > farm.level) maxEnergy = Math.min(60, 30 + level * 2);
-      await db.update(farmStateTable).set({
-        plots, coins, gems, xp, level, energy, maxEnergy,
-        animals, buildings, products, inventory, seeds,
-        quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, eventCoins, toolTiers,
-        updatedAt: new Date(),
-      }).where(eq(farmStateTable.telegramId, telegramId));
-
-      const updatedPass = await getOrCreateFarmPass(telegramId);
-      const farmOutClaim = serializeFarm({ ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, eventCoins, toolTiers }, telegramId);
+      coins = passClaimResult.newCoins;
+      gems = passClaimResult.newGems;
+      Object.assign(seeds, passClaimResult.newSeeds);
+      const updatedPass = passClaimResult.updatedPass;
+      const farmOutClaim = serializeFarm({ ...farm, plots, coins, gems, xp, level: claimLevel, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, eventCoins, toolTiers, pets: passClaimResult.newPets }, telegramId);
       const playerAchsClaim = await getPlayerAchievements(telegramId);
       return res.json({ ...farmOutClaim, farmPass: serializeFarmPass(updatedPass), achievements: buildAchievementsResponse(playerAchsClaim) });
 
@@ -2379,6 +2397,7 @@ function serializeFarm(farm: any, telegramId: string) {
     fishInventory: (farm.fishInventory as Record<string, number>) ?? {},
     toolTiers: (farm.toolTiers as ToolTiers) || emptyToolTiers(),
     toolTierConfig: TOOL_TIER_CONFIG,
+    pets: (farm.pets as PetsInventory) ?? { owned: [] },
     updatedAt: farm.updatedAt instanceof Date ? farm.updatedAt.toISOString() : farm.updatedAt,
   };
 }

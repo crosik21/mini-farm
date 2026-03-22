@@ -53,6 +53,8 @@ export type PlotState = {
   plantedAt: string | null;
   readyAt: string | null;
   doubleHarvest?: boolean;
+  /** Base grow duration in ms (season+world mult applied, weather excluded). Used to recompute readyAt when weather changes. */
+  baseGrowMs?: number;
 };
 
 export type WorldId = "main" | "forest" | "desert" | "snow";

@@ -818,13 +818,25 @@ function regenEnergy(energy: number, maxEnergy: number, lastRegen: Date): { ener
   return { energy: newEnergy, lastRegen: newLastRegen };
 }
 
-function updatePlotStatuses(plots: PlotState[]): PlotState[] {
+function updatePlotStatuses(plots: PlotState[], currentWeather: WeatherType = "sunny"): PlotState[] {
   const now = new Date();
+  const weatherMult = WEATHER_GROW_MULT[currentWeather];
   return plots.map((plot) => {
-    if (plot.status === "growing" && plot.readyAt) {
-      if (now >= new Date(plot.readyAt)) {
-        return { ...plot, status: "ready" };
+    if (plot.status === "growing" && plot.plantedAt) {
+      // Dynamic weather recalculation: if baseGrowMs is stored, recompute readyAt with current weather
+      let effectiveReadyAt: Date;
+      if (plot.baseGrowMs) {
+        effectiveReadyAt = new Date(new Date(plot.plantedAt).getTime() + plot.baseGrowMs * weatherMult);
+      } else if (plot.readyAt) {
+        effectiveReadyAt = new Date(plot.readyAt);
+      } else {
+        return plot;
       }
+      if (now >= effectiveReadyAt) {
+        return { ...plot, readyAt: effectiveReadyAt.toISOString(), status: "ready" };
+      }
+      // Update readyAt in plot to reflect current weather
+      return { ...plot, readyAt: effectiveReadyAt.toISOString() };
     }
     return plot;
   });
@@ -894,7 +906,8 @@ async function getOrCreateFarm(telegramId: string) {
 
   if (existing.length > 0) {
     const farm = existing[0];
-    const plots = updatePlotStatuses(farm.plots as PlotState[]);
+    const currentWeatherForNorm = getCurrentWeather();
+    const plots = updatePlotStatuses(farm.plots as PlotState[], currentWeatherForNorm);
     const animals = updateAnimalStatuses((farm.animals as AnimalState[]) || []);
     const buildings = updateCraftStatuses((farm.buildings as BuildingState[]) || []);
     const season = getCurrentSeason(farm.seasonUpdatedAt instanceof Date ? farm.seasonUpdatedAt : new Date(farm.seasonUpdatedAt));
@@ -1097,9 +1110,8 @@ router.post("/:telegramId/action", async (req, res) => {
     const currentWeather = getCurrentWeather();
     const activeEvent = getActiveEvent();
     let eventCoins: number = (farm.eventCoins as number) ?? 0;
-    // Storm shelter: barn building provides protection (no spoil) during storm
+    // Storm shelter: barn building converts storm 10% spoil into 10% potent harvest (+50% coins)
     const hasShelter = buildings.some((b) => BUILDING_CONFIG[b.type]?.shelter === true);
-    const effectiveSpoilChance = (currentWeather === "storm" && hasShelter) ? 0 : STORM_SPOIL_CHANCE;
 
     // ── PLANT ──────────────────────────────────────────────────────────────────
     if (action === "plant") {
@@ -1119,14 +1131,17 @@ router.post("/:telegramId/action", async (req, res) => {
       if (!cfg) return res.status(400).json({ error: "Неизвестная культура" });
       if (energy < PLANT_ENERGY) return res.status(400).json({ error: `Нужно ${PLANT_ENERGY} энергии для посадки` });
 
-      const growMult = (SEASON_GROWTH_MULTIPLIER[season] ?? 1) * worldCfg.growMultiplier * WEATHER_GROW_MULT[currentWeather];
+      // baseGrowMs = season+world mult applied, weather excluded — used for dynamic weather recalculation
+      const baseMultiplier = (SEASON_GROWTH_MULTIPLIER[season] ?? 1) * worldCfg.growMultiplier;
+      const baseGrowMs = Math.ceil(cfg.growSec * baseMultiplier) * 1000;
+      const growMult = baseMultiplier * WEATHER_GROW_MULT[currentWeather];
       const growSec = Math.ceil(cfg.growSec * growMult);
       const now = new Date();
       const readyAt = new Date(now.getTime() + growSec * 1000);
 
       energy -= PLANT_ENERGY;
       seeds[cropType as keyof CropInventory] -= 1;
-      plots = plots.map((p) => p.id === plotId ? { ...p, cropType, status: "growing" as const, plantedAt: now.toISOString(), readyAt: readyAt.toISOString() } : p);
+      plots = plots.map((p) => p.id === plotId ? { ...p, cropType, status: "growing" as const, plantedAt: now.toISOString(), readyAt: readyAt.toISOString(), baseGrowMs } : p);
       quests = updateQuestProgress(quests, "plant", cropType, 1);
 
     // ── HARVEST ────────────────────────────────────────────────────────────────
@@ -1136,32 +1151,48 @@ router.post("/:telegramId/action", async (req, res) => {
       if (!plot || plot.status !== "ready" || !plot.cropType) return res.status(400).json({ error: "Урожай ещё не готов" });
       if (energy < HARVEST_ENERGY) return res.status(400).json({ error: `Нужно ${HARVEST_ENERGY} энергии для сбора` });
 
-      // Storm spoil: chance crop is destroyed (0% with barn shelter, 10% without)
-      if (currentWeather === "storm" && Math.random() < effectiveSpoilChance) {
-        // Loss path: crop spoiled by storm
-        energy -= HARVEST_ENERGY;
-        plots = plots.map((p) => p.id === plotId ? { ...p, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null, doubleHarvest: undefined } : p);
-      } else {
-        // Potent path: storm-surviving crops yield +50% XP bonus
-        let cfg = getActiveCropConfig()[plot.cropType];
-        if (!cfg && activeEvent?.isActive) {
-          const evCropDef = activeEvent.eventCrops.find((c) => c.id === plot.cropType);
-          if (evCropDef) cfg = { growSec: evCropDef.growSec, seedCost: evCropDef.seedCostCoins, sellPrice: evCropDef.sellPrice, xp: evCropDef.xp, energyCost: 2, unlockLevel: 1 };
+      let cfg = getActiveCropConfig()[plot.cropType];
+      if (!cfg && activeEvent?.isActive) {
+        const evCropDef = activeEvent.eventCrops.find((c) => c.id === plot.cropType);
+        if (evCropDef) cfg = { growSec: evCropDef.growSec, seedCost: evCropDef.seedCostCoins, sellPrice: evCropDef.sellPrice, xp: evCropDef.xp, energyCost: 2, unlockLevel: 1 };
+      }
+      const sellMult = SEASON_SELL_MULTIPLIER[season] ?? 1;
+
+      // Storm mechanic: 10% chance rolls
+      //   - No barn (no shelter): spoil — crop is destroyed
+      //   - Barn (shelter): potent — crop yields +50% coin bonus
+      if (currentWeather === "storm" && Math.random() < STORM_SPOIL_CHANCE) {
+        if (hasShelter) {
+          // Potent harvest: crop → inventory + 50% bonus coins
+          const extraDouble = worldCfg.doubleChanceBonus > 0 && Math.random() < worldCfg.doubleChanceBonus;
+          const harvestQty = (plot.doubleHarvest || extraDouble) ? 2 : 1;
+          inventory[plot.cropType as keyof CropInventory] = (inventory[plot.cropType as keyof CropInventory] ?? 0) + harvestQty;
+          xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier);
+          coins += Math.ceil((cfg?.sellPrice ?? 10) * sellMult * harvestQty * 0.5);
+          energy -= HARVEST_ENERGY;
+          plots = plots.map((p) => p.id === plotId ? { ...p, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null, doubleHarvest: undefined } : p);
+          quests = updateQuestProgress(quests, "harvest", plot.cropType, harvestQty);
+          await updateAchievementProgress(telegramId, "harvest", harvestQty);
+          if (activeEvent?.isActive && activeEvent.eventCrops.some((c) => c.id === plot.cropType)) {
+            eventCoins += activeEvent.eventCoinReward * harvestQty;
+          }
+        } else {
+          // Spoil path: crop destroyed by storm (no shelter)
+          energy -= HARVEST_ENERGY;
+          plots = plots.map((p) => p.id === plotId ? { ...p, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null, doubleHarvest: undefined } : p);
         }
-        const sellMult = SEASON_SELL_MULTIPLIER[season] ?? 1;
-        const potentXpMult = currentWeather === "storm" ? 1.5 : 1;
+      } else {
+        // Normal harvest (90% of storm, or any non-storm weather)
         const extraDouble = worldCfg.doubleChanceBonus > 0 && Math.random() < worldCfg.doubleChanceBonus;
         const harvestQty = (plot.doubleHarvest || extraDouble) ? 2 : 1;
         inventory[plot.cropType as keyof CropInventory] = (inventory[plot.cropType as keyof CropInventory] ?? 0) + harvestQty;
-        xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier * potentXpMult);
+        xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier);
         energy -= HARVEST_ENERGY;
         plots = plots.map((p) => p.id === plotId ? { ...p, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null, doubleHarvest: undefined } : p);
         quests = updateQuestProgress(quests, "harvest", plot.cropType, harvestQty);
         await updateAchievementProgress(telegramId, "harvest", harvestQty);
-        // Event coin reward for event crops
-        if (activeEvent?.isActive) {
-          const isEventCrop = activeEvent.eventCrops.some((c) => c.id === plot.cropType);
-          if (isEventCrop) eventCoins += activeEvent.eventCoinReward * harvestQty;
+        if (activeEvent?.isActive && activeEvent.eventCrops.some((c) => c.id === plot.cropType)) {
+          eventCoins += activeEvent.eventCoinReward * harvestQty;
         }
       }
 
@@ -1172,33 +1203,45 @@ router.post("/:telegramId/action", async (req, res) => {
       const sellMult = SEASON_SELL_MULTIPLIER[season] ?? 1;
       const harvestedIds: number[] = [];
       let totalHarvested = 0;
-      const potentXpMult = currentWeather === "storm" ? 1.5 : 1;
       for (const plot of readyPlots) {
         if (energy < HARVEST_ENERGY) break;
         energy -= HARVEST_ENERGY;
-        // Storm spoil check per plot (0% with shelter, 10% without)
-        if (currentWeather === "storm" && Math.random() < effectiveSpoilChance) {
-          // Loss path: spoiled by storm
-          harvestedIds.push(plot.id);
-          continue;
-        }
-        // Potent path: storm-surviving crops yield +50% XP
         let cfg = getActiveCropConfig()[plot.cropType!];
         if (!cfg && activeEvent?.isActive) {
           const evCropDef = activeEvent.eventCrops.find((c) => c.id === plot.cropType);
           if (evCropDef) cfg = { growSec: evCropDef.growSec, seedCost: evCropDef.seedCostCoins, sellPrice: evCropDef.sellPrice, xp: evCropDef.xp, energyCost: 2, unlockLevel: 1 };
         }
+        // Storm mechanic: 10% chance — spoil (no barn) or potent +50% coins (barn)
+        if (currentWeather === "storm" && Math.random() < STORM_SPOIL_CHANCE) {
+          if (hasShelter) {
+            // Potent harvest
+            const extraDouble = worldCfg.doubleChanceBonus > 0 && Math.random() < worldCfg.doubleChanceBonus;
+            const harvestQty = (plot.doubleHarvest || extraDouble) ? 2 : 1;
+            inventory[plot.cropType as keyof CropInventory] = (inventory[plot.cropType as keyof CropInventory] ?? 0) + harvestQty;
+            xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier);
+            coins += Math.ceil((cfg?.sellPrice ?? 10) * sellMult * harvestQty * 0.5);
+            quests = updateQuestProgress(quests, "harvest", plot.cropType!, harvestQty);
+            harvestedIds.push(plot.id);
+            totalHarvested += harvestQty;
+            if (activeEvent?.isActive && activeEvent.eventCrops.some((c) => c.id === plot.cropType)) {
+              eventCoins += activeEvent.eventCoinReward * harvestQty;
+            }
+          } else {
+            // Spoil path: crop destroyed
+            harvestedIds.push(plot.id);
+          }
+          continue;
+        }
+        // Normal harvest
         const extraDouble = worldCfg.doubleChanceBonus > 0 && Math.random() < worldCfg.doubleChanceBonus;
         const harvestQty = (plot.doubleHarvest || extraDouble) ? 2 : 1;
         inventory[plot.cropType as keyof CropInventory] = (inventory[plot.cropType as keyof CropInventory] ?? 0) + harvestQty;
-        xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier * potentXpMult);
+        xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier);
         quests = updateQuestProgress(quests, "harvest", plot.cropType!, harvestQty);
         harvestedIds.push(plot.id);
         totalHarvested += harvestQty;
-        // Event coin reward for event crops
-        if (activeEvent?.isActive) {
-          const isEventCrop = activeEvent.eventCrops.some((c) => c.id === plot.cropType);
-          if (isEventCrop) eventCoins += activeEvent.eventCoinReward * harvestQty;
+        if (activeEvent?.isActive && activeEvent.eventCrops.some((c) => c.id === plot.cropType)) {
+          eventCoins += activeEvent.eventCoinReward * harvestQty;
         }
       }
       if (totalHarvested > 0) await updateAchievementProgress(telegramId, "harvest", totalHarvested);
@@ -1237,7 +1280,7 @@ router.post("/:telegramId/action", async (req, res) => {
       worlds[activeWorldId] = { ...(worlds[activeWorldId] || { unlocked: true }), plots };
       // Load target world's plots
       const targetWorld = worlds[targetWorldId]!;
-      plots = updatePlotStatuses(targetWorld.plots);
+      plots = updatePlotStatuses(targetWorld.plots, currentWeather);
       activeWorldId = targetWorldId;
 
     // ── BUY SEEDS ──────────────────────────────────────────────────────────────

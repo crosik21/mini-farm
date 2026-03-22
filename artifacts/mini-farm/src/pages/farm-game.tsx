@@ -22,6 +22,7 @@ import { StreakModal } from "@/components/game/StreakModal";
 import { FishingTab } from "@/components/game/FishingTab";
 import { MarketplaceTab } from "@/components/game/MarketplaceTab";
 import { FarmPassTab } from "@/components/game/FarmPassTab";
+import { OnboardingOverlay, useOnboarding } from "@/components/game/OnboardingOverlay";
 import { Sprout, Cat, Factory } from "lucide-react";
 
 interface FloatingReward {
@@ -1107,6 +1108,7 @@ export default function FarmGame() {
   const [activeItemMode, setActiveItemMode] = useState<"watering_can" | "sprinkler" | null>(null);
   const rewardIdRef = useRef(0);
   const streakShownRef = useRef(false);
+  const { showOnboarding, finishOnboarding } = useOnboarding();
 
   // Show streak modal once on first load if there's a pending reward
   useEffect(() => {
@@ -1406,6 +1408,13 @@ export default function FarmGame() {
               )}
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* First-time onboarding */}
+      <AnimatePresence>
+        {showOnboarding && (
+          <OnboardingOverlay onFinish={finishOnboarding} />
         )}
       </AnimatePresence>
     </div>

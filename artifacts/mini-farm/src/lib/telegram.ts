@@ -249,13 +249,6 @@ export const initTelegramApp = () => {
   const tg = getTelegramContext();
   if (tg) {
     tg.ready();
-    tg.expand();
-
-    try {
-      if (typeof tg.requestFullscreen === 'function' && !tg.isFullscreen) {
-        tg.requestFullscreen();
-      }
-    } catch { /* not supported */ }
 
     try {
       if (typeof tg.enableClosingConfirmation === 'function') {

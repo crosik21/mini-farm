@@ -1,4 +1,4 @@
-import { pgTable, text, integer, jsonb, timestamp, serial, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, jsonb, timestamp, serial, uniqueIndex, boolean, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -35,6 +35,7 @@ export const farmStateTable = pgTable("farm_states", {
   eventCoins: integer("event_coins").notNull().default(0),
   weatherType: text("weather_type").notNull().default("sunny"),
   weatherUpdatedAt: timestamp("weather_updated_at").notNull().defaultNow(),
+  fishInventory: jsonb("fish_inventory").$type<Record<string, number>>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -267,3 +268,33 @@ export const achievementsTable = pgTable("achievements", {
 }));
 
 export type Achievement = typeof achievementsTable.$inferSelect;
+
+// ─────────────────────── Fishing ──────────────────────────────────────────────
+
+export const fishingTable = pgTable("fishing_sessions", {
+  id: serial("id").primaryKey(),
+  telegramId: text("telegram_id").notNull(),
+  baitUsedAt: timestamp("bait_used_at").notNull().defaultNow(),
+  catchAt: timestamp("catch_at").notNull(),
+  fishType: text("fish_type"),
+  claimed: integer("claimed").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type FishingSession = typeof fishingTable.$inferSelect;
+
+// ─────────────────────── Market Listings ──────────────────────────────────────
+
+export const marketListingsTable = pgTable("market_listings", {
+  id: serial("id").primaryKey(),
+  sellerId: text("seller_id").notNull(),
+  itemType: text("item_type").notNull(), // "crop" | "product" | "fish"
+  itemId: text("item_id").notNull(),
+  quantity: integer("quantity").notNull(),
+  pricePerUnit: integer("price_per_unit").notNull(),
+  status: text("status").notNull().default("active"), // "active" | "sold" | "cancelled"
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type MarketListing = typeof marketListingsTable.$inferSelect;

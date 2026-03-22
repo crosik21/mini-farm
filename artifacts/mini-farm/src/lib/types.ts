@@ -225,6 +225,38 @@ export interface ActiveEventInfo {
   msLeft: number;
 }
 
+export type FishType = "bass" | "carp" | "pike" | "salmon" | "legendary_fish";
+
+export interface FishMeta {
+  name: string;
+  emoji: string;
+  sellPrice: number;
+}
+
+export interface FishingSession {
+  id: number;
+  telegramId: string;
+  baitUsedAt: string;
+  catchAt: string;
+  fishType: string | null;
+  claimed: number;
+  createdAt: string;
+}
+
+export interface MarketListing {
+  id: number;
+  sellerId: string;
+  itemType: "crop" | "product" | "fish";
+  itemId: string;
+  quantity: number;
+  pricePerUnit: number;
+  status: string;
+  expiresAt: string;
+  createdAt: string;
+  sellerName?: string;
+  isOwn?: boolean;
+}
+
 export interface FarmData {
   telegramId: string;
   username: string | null;
@@ -263,6 +295,7 @@ export interface FarmData {
   weatherConfig: WeatherConfig;
   weatherGrowMult: number;
   activeEvent: ActiveEventInfo | null;
+  fishInventory: Record<string, number>;
   updatedAt: string;
 }
 

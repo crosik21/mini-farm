@@ -149,6 +149,9 @@ const RECIPE_CONFIG: Record<string, { building: string; inputs: { itemId: string
   bacon:        { building: "kitchen", inputs: [{ itemId: "meat",       quantity: 1 }],  outputId: "bacon",        outputQty: 1, craftSec: 180,  sellPrice: 220,  xp: 35  },
   honey_bread:  { building: "kitchen", inputs: [{ itemId: "honey",      quantity: 1 }, { itemId: "flour",  quantity: 1 }], outputId: "honey_bread",  outputQty: 1, craftSec: 300,  sellPrice: 400,  xp: 55  },
   roast:        { building: "kitchen", inputs: [{ itemId: "meat",       quantity: 1 }, { itemId: "mushroom", quantity: 1 }], outputId: "roast",        outputQty: 1, craftSec: 480,  sellPrice: 600,  xp: 75  },
+  // ── Рыбные рецепты (кухня) ────────────────────────────────────────────────
+  fish_soup:    { building: "kitchen", inputs: [{ itemId: "carp",       quantity: 1 }, { itemId: "milk",   quantity: 1 }], outputId: "fish_soup",    outputQty: 1, craftSec: 360,  sellPrice: 280,  xp: 45  },
+  grilled_fish: { building: "kitchen", inputs: [{ itemId: "salmon",     quantity: 1 }], outputId: "grilled_fish", outputQty: 1, craftSec: 300,  sellPrice: 420,  xp: 60  },
 };
 
 const PRODUCT_SELL_PRICE: Record<string, number> = {
@@ -1424,18 +1427,33 @@ router.post("/:telegramId/action", async (req, res) => {
       if (!rcfg) return res.status(400).json({ error: "Неизвестный рецепт" });
       if (rcfg.building !== building.type) return res.status(400).json({ error: "Неверное здание для рецепта" });
 
+      const fishInv: Record<string, number> = { ...((farm.fishInventory as Record<string, number>) ?? {}) };
+      const FISH_IDS = new Set(["bass", "carp", "pike", "salmon", "legendary_fish"]);
+
       for (const input of rcfg.inputs) {
-        const available = input.itemId in inventory
-          ? (inventory[input.itemId as keyof CropInventory] ?? 0)
-          : (products[input.itemId as keyof ProductInventory] ?? 0);
+        const isFish = FISH_IDS.has(input.itemId);
+        const available = isFish
+          ? (fishInv[input.itemId] ?? 0)
+          : input.itemId in inventory
+            ? (inventory[input.itemId as keyof CropInventory] ?? 0)
+            : (products[input.itemId as keyof ProductInventory] ?? 0);
         if (available < input.quantity) return res.status(400).json({ error: `Нужно ${input.quantity} ${input.itemId}` });
       }
       for (const input of rcfg.inputs) {
-        if (input.itemId in inventory) {
+        const isFish = FISH_IDS.has(input.itemId);
+        if (isFish) {
+          fishInv[input.itemId] = (fishInv[input.itemId] ?? 0) - input.quantity;
+        } else if (input.itemId in inventory) {
           inventory[input.itemId as keyof CropInventory] -= input.quantity;
         } else {
           products[input.itemId as keyof ProductInventory] -= input.quantity;
         }
+      }
+      // Persist fish inventory changes if any fish was used
+      const fishUsed = rcfg.inputs.some((inp) => FISH_IDS.has(inp.itemId));
+      if (fishUsed) {
+        await db.update(farmStateTable).set({ fishInventory: fishInv }).where(eq(farmStateTable.telegramId, telegramId));
+        farm.fishInventory = fishInv;
       }
       const now = new Date();
       buildings[bIdx] = { ...building, crafting: { recipe, startedAt: now.toISOString(), readyAt: new Date(now.getTime() + rcfg.craftSec * 1000).toISOString() } };
@@ -2048,6 +2066,7 @@ function serializeFarm(farm: any, telegramId: string) {
     weatherConfig: WEATHER_CONFIG[weather],
     weatherGrowMult: WEATHER_GROW_MULT[weather],
     activeEvent: event?.isActive ? event : null,
+    fishInventory: (farm.fishInventory as Record<string, number>) ?? {},
     updatedAt: farm.updatedAt instanceof Date ? farm.updatedAt.toISOString() : farm.updatedAt,
   };
 }

@@ -599,6 +599,7 @@ router.post("/event", (req, res) => {
       id: body.id,
       name: body.name,
       emoji: body.emoji ?? "🎉",
+      description: body.description?.trim() || "",
       startAt: body.startAt,
       endAt: body.endAt,
       eventCoinName: body.eventCoinName ?? "Ивент-монеты",

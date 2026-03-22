@@ -1336,7 +1336,12 @@ router.post("/:telegramId/action", async (req, res) => {
     // ── SELL CROPS ─────────────────────────────────────────────────────────────
     } else if (action === "sell_crops") {
       if (!cropType || !quantity) return res.status(400).json({ error: "cropType и quantity обязательны" });
-      const cfg = getActiveCropConfig()[cropType];
+      let cfg = getActiveCropConfig()[cropType];
+      // Fallback: check active event crops so harvested event crops can be sold
+      if (!cfg && activeEvent?.isActive) {
+        const evCropDef = activeEvent.eventCrops.find((c) => c.id === cropType);
+        if (evCropDef) cfg = { growSec: evCropDef.growSec, seedCost: evCropDef.seedCostCoins, sellPrice: evCropDef.sellPrice, xp: evCropDef.xp, energyCost: 2, unlockLevel: 1 };
+      }
       if (!cfg) return res.status(400).json({ error: "Неизвестная культура" });
       const available = inventory[cropType as keyof CropInventory] ?? 0;
       if (available < quantity) return res.status(400).json({ error: "Недостаточно урожая" });

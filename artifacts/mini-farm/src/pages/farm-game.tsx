@@ -797,6 +797,24 @@ function FieldView({
         )}
       </AnimatePresence>
 
+      {/* ── Event Banner ── */}
+      {farm.activeEvent && (
+        <motion.div
+          key="event-banner"
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mx-3 mb-1.5 flex items-center gap-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl shadow-md overflow-hidden cursor-pointer active:scale-95 transition-transform"
+          onClick={() => setShowEventShop(true)}
+        >
+          <span className="text-lg px-2 py-2">{farm.activeEvent.emoji}</span>
+          <div className="flex-1 py-2">
+            <div className="text-xs font-black leading-tight">{farm.activeEvent.name}</div>
+            <div className="text-[10px] text-white/80">{farm.eventCoins} {farm.activeEvent.eventCoinEmoji} · {Math.ceil(farm.activeEvent.msLeft / 60000)} мин. осталось</div>
+          </div>
+          <span className="text-white/90 text-xs font-bold px-3">Магазин →</span>
+        </motion.div>
+      )}
+
       {/* ── Field grid — full width, no box ── */}
       <div className="flex-1 flex flex-col justify-center items-center px-2 pb-1">
 
@@ -858,6 +876,7 @@ function FieldView({
                 coins={farm.coins}
                 activeSprinklers={farm.activeSprinklers}
                 selectionMode={activeItemMode}
+                weather={farm.currentWeather}
               />
             </motion.div>
           </div>
@@ -1078,6 +1097,7 @@ export default function FarmGame() {
   const [energyModalOpen, setEnergyModalOpen] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
   const [streakModalOpen, setStreakModalOpen] = useState(false);
+  const [showEventShop, setShowEventShop] = useState(false);
   const [floatingRewards, setFloatingRewards] = useState<FloatingReward[]>([]);
   const [activeItemMode, setActiveItemMode] = useState<"watering_can" | "sprinkler" | null>(null);
   const rewardIdRef = useRef(0);
@@ -1277,6 +1297,93 @@ export default function FarmGame() {
           onClose={() => setStreakModalOpen(false)}
         />
       )}
+
+      {/* ── Event Shop Modal ── */}
+      <AnimatePresence>
+        {showEventShop && farm.activeEvent && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-end justify-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <div className="absolute inset-0 bg-black/40" onClick={() => setShowEventShop(false)} />
+            <motion.div
+              className="relative w-full max-w-md bg-card rounded-t-2xl shadow-2xl pb-safe overflow-hidden"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 32, stiffness: 380 }}
+            >
+              {/* Header */}
+              <div className="bg-gradient-to-r from-purple-500 to-pink-500 px-4 py-3 flex items-center gap-2">
+                <span className="text-2xl">{farm.activeEvent.emoji}</span>
+                <div className="flex-1">
+                  <div className="font-black text-white text-sm">{farm.activeEvent.name}</div>
+                  <div className="text-white/80 text-[10px]">{farm.activeEvent.description}</div>
+                </div>
+                <button onClick={() => setShowEventShop(false)} className="text-white/80 text-xl leading-none font-bold">✕</button>
+              </div>
+              {/* Balance */}
+              <div className="px-4 py-2 bg-purple-50 border-b border-purple-100 flex items-center gap-2">
+                <span className="text-lg">{farm.activeEvent.eventCoinEmoji}</span>
+                <span className="font-black text-purple-700">{farm.eventCoins}</span>
+                <span className="text-xs text-purple-500 ml-1">ивент-монет</span>
+                <span className="ml-auto text-[10px] text-gray-400">{Math.ceil(farm.activeEvent.msLeft / 60000)} мин. осталось</span>
+              </div>
+              {/* Event crops */}
+              {farm.activeEvent.eventCrops.length > 0 && (
+                <div className="px-4 pt-3">
+                  <div className="text-xs font-bold text-gray-500 mb-2 uppercase tracking-wide">🌱 Ивент-культуры</div>
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    {farm.activeEvent.eventCrops.map((crop) => (
+                      <button
+                        key={crop.id}
+                        onClick={() => performAction({ action: "buy_event_crop_seed", cropType: crop.id, quantity: 1 })}
+                        className="flex flex-col items-center bg-white border border-purple-200 rounded-xl p-2 active:scale-95 transition-transform"
+                      >
+                        <span className="text-2xl mb-1">{crop.emoji}</span>
+                        <span className="text-xs font-bold">{crop.name}</span>
+                        <span className="text-[10px] text-gray-500">{crop.growSec >= 60 ? `${Math.floor(crop.growSec/60)}мин` : `${crop.growSec}сек`}</span>
+                        <span className="text-[11px] font-black text-amber-700 mt-1">🪙{crop.seedCostCoins}/шт</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Shop items */}
+              {farm.activeEvent.shopItems.length > 0 && (
+                <div className="px-4 pb-4">
+                  <div className="text-xs font-bold text-gray-500 mb-2 uppercase tracking-wide">🎁 Награды</div>
+                  <div className="flex flex-col gap-2">
+                    {farm.activeEvent.shopItems.map((item) => (
+                      <button
+                        key={item.id}
+                        disabled={farm.eventCoins < item.cost}
+                        onClick={() => performAction({ action: "spend_event_coins", itemId: item.id })}
+                        className={`flex items-center gap-3 p-3 rounded-xl border transition-all active:scale-95 ${
+                          farm.eventCoins >= item.cost
+                            ? "bg-white border-purple-200 hover:border-purple-400"
+                            : "bg-gray-50 border-gray-200 opacity-50 cursor-not-allowed"
+                        }`}
+                      >
+                        <span className="text-xl">{item.emoji}</span>
+                        <div className="flex-1 text-left">
+                          <div className="text-sm font-bold">{item.name}</div>
+                          {item.rewardCoins && <div className="text-[10px] text-amber-600">+{item.rewardCoins} 🪙</div>}
+                          {item.rewardGems && <div className="text-[10px] text-purple-600">+{item.rewardGems} 💎</div>}
+                          {item.rewardSeedType && <div className="text-[10px] text-green-600">+{item.rewardSeedQty} семян</div>}
+                        </div>
+                        <span className="font-black text-purple-700 text-sm">{item.cost} {farm.activeEvent.eventCoinEmoji}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

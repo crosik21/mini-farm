@@ -180,6 +180,51 @@ export interface AchievementState {
   rewardGems: number;
 }
 
+export type WeatherType = "sunny" | "rainy" | "storm";
+
+export interface WeatherConfig {
+  label: string;
+  emoji: string;
+  tip: string;
+}
+
+export interface EventCropDef {
+  id: string;
+  name: string;
+  emoji: string;
+  growSec: number;
+  seedCostCoins: number;
+  sellPrice: number;
+  xp: number;
+  world: string;
+}
+
+export interface EventShopItem {
+  id: string;
+  name: string;
+  emoji: string;
+  cost: number;
+  rewardCoins?: number;
+  rewardGems?: number;
+  rewardSeedType?: string;
+  rewardSeedQty?: number;
+}
+
+export interface ActiveEventInfo {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  startAt: string;
+  endAt: string;
+  eventCoinEmoji: string;
+  eventCoinReward: number;
+  eventCrops: EventCropDef[];
+  shopItems: EventShopItem[];
+  isActive: boolean;
+  msLeft: number;
+}
+
 export interface FarmData {
   telegramId: string;
   username: string | null;
@@ -213,6 +258,11 @@ export interface FarmData {
   streakRewardDay: number;
   streakRewards: StreakReward[];
   achievements: AchievementState[];
+  eventCoins: number;
+  currentWeather: WeatherType;
+  weatherConfig: WeatherConfig;
+  weatherGrowMult: number;
+  activeEvent: ActiveEventInfo | null;
   updatedAt: string;
 }
 
@@ -243,4 +293,6 @@ export type FarmAction =
   | { action: "open_case"; caseId: string }
   | { action: "set_ref_code"; code: string }
   | { action: "claim_streak_reward" }
-  | { action: "claim_achievement"; achievementId: string };
+  | { action: "claim_achievement"; achievementId: string }
+  | { action: "buy_event_crop_seed"; cropType: string; quantity: number }
+  | { action: "spend_event_coins"; itemId: string };

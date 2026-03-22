@@ -1,4 +1,5 @@
-import { motion } from "framer-motion";
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { getLevelProgress, SEASON_CONFIG } from "@/lib/constants";
 import { FarmData } from "@/lib/types";
 import { Zap, Gem, Plus } from "lucide-react";
@@ -8,11 +9,20 @@ interface TopBarProps {
   onEnergyClick?: () => void;
 }
 
+const WEATHER_CHIP_STYLE: Record<string, string> = {
+  sunny: "bg-amber-50 border-amber-200 text-amber-700",
+  rainy: "bg-blue-50 border-blue-200 text-blue-700",
+  storm: "bg-gray-100 border-gray-300 text-gray-700",
+};
+
 export function TopBar({ farm, onEnergyClick }: TopBarProps) {
   const { progress, current, needed } = getLevelProgress(farm.xp, farm.level);
   const season = SEASON_CONFIG[farm.season] || SEASON_CONFIG.spring;
   const energyPct = Math.min(100, (farm.energy / farm.maxEnergy) * 100);
   const energyLow = farm.energy < 5;
+  const [showWeatherTip, setShowWeatherTip] = useState(false);
+  const weather = farm.currentWeather ?? "sunny";
+  const weatherCfg = farm.weatherConfig ?? { emoji: "☀️", label: "Солнечно", tip: "" };
 
   return (
     <div
@@ -42,7 +52,7 @@ export function TopBar({ farm, onEnergyClick }: TopBarProps) {
         </div>
       </div>
 
-      {/* ── Row 2: Coins + Gems + Energy ── */}
+      {/* ── Row 2: Coins + Gems + Weather + Energy ── */}
       <div className="flex items-center gap-1.5">
         <motion.div key={farm.coins} initial={{ scale: 1.12 }} animate={{ scale: 1 }}
           className="flex items-center gap-0.5 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
@@ -55,6 +65,30 @@ export function TopBar({ farm, onEnergyClick }: TopBarProps) {
           <Gem className="w-2.5 h-2.5 text-purple-500" />
           <span className="font-bold text-purple-700 text-xs">{farm.gems}</span>
         </motion.div>
+
+        {/* Weather chip */}
+        <div className="relative">
+          <button
+            onClick={() => setShowWeatherTip((v) => !v)}
+            className={`flex items-center gap-0.5 border rounded-full px-1.5 py-0.5 text-[11px] font-bold transition-all active:scale-95 ${WEATHER_CHIP_STYLE[weather] ?? WEATHER_CHIP_STYLE.sunny}`}
+          >
+            <span>{weatherCfg.emoji}</span>
+          </button>
+          <AnimatePresence>
+            {showWeatherTip && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className="absolute top-full left-0 mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg px-3 py-2 w-44 text-xs"
+                onClick={() => setShowWeatherTip(false)}
+              >
+                <div className="font-bold mb-0.5">{weatherCfg.emoji} {weatherCfg.label}</div>
+                <div className="text-gray-500">{weatherCfg.tip}</div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
         <button
           onClick={onEnergyClick}

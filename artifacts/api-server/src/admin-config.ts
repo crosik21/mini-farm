@@ -99,6 +99,41 @@ export const DEFAULT_SHOP_GLOBAL: ShopGlobalSettings = {
   sodStock:         3,
 };
 
+export interface EventShopItem {
+  id: string;
+  name: string;
+  emoji: string;
+  cost: number;
+  rewardCoins?: number;
+  rewardGems?: number;
+  rewardSeedType?: string;
+  rewardSeedQty?: number;
+}
+
+export interface EventCropDef {
+  id: string;
+  name: string;
+  emoji: string;
+  growSec: number;
+  seedCostCoins: number;
+  sellPrice: number;
+  xp: number;
+}
+
+export interface SeasonalEventDef {
+  id: string;
+  name: string;
+  emoji: string;
+  description?: string;
+  startAt: string;
+  endAt: string;
+  eventCoinName: string;
+  eventCoinEmoji: string;
+  eventCoinReward: number;
+  eventCrops: EventCropDef[];
+  shopItems: EventShopItem[];
+}
+
 export interface AdminConfig {
   npcTemplates: NpcTemplate[];
   dailyQuestTemplates: DailyQuestTemplate[];
@@ -108,6 +143,7 @@ export interface AdminConfig {
   shopCropOverrides?: Record<string, ShopCropOverride>;
   shopGlobalSettings?: Partial<ShopGlobalSettings>;
   customCases?: Record<string, CustomCaseDef>;
+  activeEvent?: SeasonalEventDef | null;
 }
 
 export const DEFAULT_CONFIG: AdminConfig = {

@@ -381,6 +381,116 @@ function PlayersTab({ secret }: { secret: string }) {
 }
 
 // ── Season Tab ─────────────────────────────────────────────────────────────────
+interface EventFormState {
+  id: string; name: string; emoji: string; description: string;
+  startAt: string; endAt: string; eventCoinEmoji: string; eventCoinReward: string;
+}
+
+function EventManagementSection({ secret, onMsg }: { secret: string; onMsg: (msg: string) => void }) {
+  const defaultForm: EventFormState = {
+    id: "event_" + Date.now(), name: "", emoji: "🎉", description: "",
+    startAt: new Date().toISOString().slice(0, 16),
+    endAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
+    eventCoinEmoji: "🪙", eventCoinReward: "3",
+  };
+  const [form, setForm] = useState<EventFormState>(defaultForm);
+  const [showForm, setShowForm] = useState(false);
+
+  const { data: evData, refetch: refetchEv } = useQuery<{ activeEvent: any }>({
+    queryKey: ["admin-event"],
+    queryFn: async () => {
+      const r = await adminFetch("/api/admin/event", secret);
+      return r.json();
+    },
+  });
+
+  const { mutate: startEvent, isPending: isStarting } = useMutation({
+    mutationFn: async () => {
+      const body = {
+        id: form.id, name: form.name, emoji: form.emoji, description: form.description,
+        startAt: new Date(form.startAt).toISOString(),
+        endAt: new Date(form.endAt).toISOString(),
+        eventCoinEmoji: form.eventCoinEmoji,
+        eventCoinReward: Number(form.eventCoinReward) || 3,
+        eventCrops: [], shopItems: [],
+      };
+      const r = await adminFetch("/api/admin/event", secret, { method: "POST", body: JSON.stringify(body) });
+      if (!r.ok) throw new Error((await r.json()).error);
+      return r.json();
+    },
+    onSuccess: () => { refetchEv(); setShowForm(false); onMsg("Ивент запущен!"); },
+    onError: (e: Error) => onMsg("Ошибка: " + e.message),
+  });
+
+  const { mutate: stopEvent, isPending: isStopping } = useMutation({
+    mutationFn: async () => {
+      const r = await adminFetch("/api/admin/event", secret, { method: "DELETE" });
+      if (!r.ok) throw new Error((await r.json()).error);
+      return r.json();
+    },
+    onSuccess: () => { refetchEv(); onMsg("Ивент остановлен"); },
+  });
+
+  const activeEvent = evData?.activeEvent;
+
+  return (
+    <section>
+      <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wide mb-3">🎉 Сезонный ивент</h2>
+      {activeEvent ? (
+        <div className="bg-purple-50 border-2 border-purple-200 rounded-2xl p-4 flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">{activeEvent.emoji}</span>
+            <div className="flex-1">
+              <div className="font-bold text-purple-800">{activeEvent.name}</div>
+              <div className="text-xs text-purple-500">до {new Date(activeEvent.endAt).toLocaleString("ru")}</div>
+            </div>
+            <button
+              onClick={() => stopEvent()}
+              disabled={isStopping}
+              className="bg-red-100 text-red-700 border border-red-300 text-xs font-bold px-3 py-1.5 rounded-xl active:scale-95 transition-all"
+            >
+              Остановить
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="text-xs text-gray-400 mb-2">Нет активного ивента</div>
+      )}
+      {!showForm ? (
+        <button
+          onClick={() => setShowForm(true)}
+          className="mt-2 w-full bg-purple-50 border-2 border-purple-200 text-purple-700 font-bold py-3 rounded-2xl text-sm active:scale-95 transition-all"
+        >
+          + Создать ивент
+        </button>
+      ) : (
+        <div className="mt-2 bg-white border-2 border-purple-100 rounded-2xl p-4 flex flex-col gap-3">
+          <div className="grid grid-cols-2 gap-2">
+            <input className="border rounded-xl px-3 py-2 text-sm col-span-2" placeholder="Название" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+            <input className="border rounded-xl px-3 py-2 text-sm" placeholder="Эмодзи 🎉" value={form.emoji} onChange={(e) => setForm((f) => ({ ...f, emoji: e.target.value }))} />
+            <input className="border rounded-xl px-3 py-2 text-sm" placeholder="Монет-эмодзи 🪙" value={form.eventCoinEmoji} onChange={(e) => setForm((f) => ({ ...f, eventCoinEmoji: e.target.value }))} />
+            <input className="border rounded-xl px-3 py-2 text-sm" placeholder="Нагр./урожай" type="number" value={form.eventCoinReward} onChange={(e) => setForm((f) => ({ ...f, eventCoinReward: e.target.value }))} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] text-gray-400 font-bold uppercase">Начало</label>
+              <input type="datetime-local" className="border rounded-xl px-3 py-2 text-sm w-full" value={form.startAt} onChange={(e) => setForm((f) => ({ ...f, startAt: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-400 font-bold uppercase">Конец</label>
+              <input type="datetime-local" className="border rounded-xl px-3 py-2 text-sm w-full" value={form.endAt} onChange={(e) => setForm((f) => ({ ...f, endAt: e.target.value }))} />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-200 text-gray-500 font-bold py-2.5 rounded-xl text-sm">Отмена</button>
+            <button onClick={() => startEvent()} disabled={isStarting || !form.name} className="flex-1 bg-purple-500 text-white font-bold py-2.5 rounded-xl text-sm active:scale-95 transition-all disabled:opacity-50">Запустить</button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function SeasonTab({ secret }: { secret: string }) {
   const qc = useQueryClient();
   const [success, setSuccess] = useState("");
@@ -463,6 +573,11 @@ function SeasonTab({ secret }: { secret: string }) {
           ))}
         </div>
       </section>
+
+      <EventManagementSection
+        secret={secret}
+        onMsg={(msg) => { setSuccess(msg); setTimeout(() => setSuccess(""), 3000); }}
+      />
     </div>
   );
 }

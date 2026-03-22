@@ -214,10 +214,11 @@ export interface IsometricFieldProps {
   coins: number;
   activeSprinklers?: Array<{ affectedPlotIds: number[]; expiresAt: string }>;
   selectionMode?: "watering_can" | "sprinkler" | null;
+  weather?: "sunny" | "rainy" | "storm";
 }
 
 export function IsometricField({
-  plots, cols, onTap, onExpand, nextTier, coins, activeSprinklers, selectionMode,
+  plots, cols, onTap, onExpand, nextTier, coins, activeSprinklers, selectionMode, weather = "sunny",
 }: IsometricFieldProps) {
   const cfg = TILE_CFG[cols as keyof typeof TILE_CFG] ?? TILE_CFG[3];
   const { TW, TH, DEPTH } = cfg;
@@ -309,6 +310,14 @@ export function IsometricField({
       <rect x={0} y={fieldH} width={fieldW} height={DEPTH} fill="#7a4e28" />
       {/* depth highlight */}
       <rect x={0} y={fieldH} width={fieldW} height={1} fill="rgba(255,255,255,0.08)" />
+
+      {/* ── Weather overlay ── */}
+      {weather === "rainy" && (
+        <rect x={0} y={0} width={svgW} height={svgH} fill="rgba(100,150,220,0.10)" pointerEvents="none" />
+      )}
+      {weather === "storm" && (
+        <rect x={0} y={0} width={svgW} height={svgH} fill="rgba(60,60,100,0.18)" pointerEvents="none" />
+      )}
 
       </g>
     </svg>

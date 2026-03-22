@@ -2,7 +2,7 @@ import { Router, type IRouter, type Request, type Response, type NextFunction } 
 import { db } from "@workspace/db";
 import { farmStateTable, referralsTable, shopPurchasesTable, promocodesTable, promocodeUsesTable } from "@workspace/db";
 import { eq, desc, sql, like, count } from "drizzle-orm";
-import { getAdminConfig, saveAdminConfig, type AdminConfig, type ShopCropOverride, type ShopGlobalSettings, DEFAULT_SHOP_GLOBAL, type CustomCaseDef, type CustomCaseDrop } from "../admin-config";
+import { getAdminConfig, saveAdminConfig, type AdminConfig, type ShopCropOverride, type ShopGlobalSettings, DEFAULT_SHOP_GLOBAL, type CustomCaseDef, type CustomCaseDrop, type SeasonalEventDef, type EventCropDef, type EventShopItem } from "../admin-config";
 import { generateShopSlots, currentEpoch, SHOP_INTERVAL_MS } from "./farm";
 
 const router: IRouter = Router();
@@ -572,6 +572,54 @@ router.delete("/cases/:id", (req, res) => {
     if (!cases[id]) return res.status(404).json({ error: "Кейс не найден" });
     delete cases[id];
     saveAdminConfig({ ...cfg, customCases: cases });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+// ── GET /api/admin/event ──────────────────────────────────────────────────────
+router.get("/event", (_req, res) => {
+  try {
+    const cfg = getAdminConfig();
+    res.json({ activeEvent: cfg.activeEvent ?? null });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+// ── POST /api/admin/event ─────────────────────────────────────────────────────
+router.post("/event", (req, res) => {
+  try {
+    const body = req.body as Partial<SeasonalEventDef>;
+    if (!body.id || !body.name || !body.startAt || !body.endAt) {
+      return res.status(400).json({ error: "id, name, startAt, endAt обязательны" });
+    }
+    const ev: SeasonalEventDef = {
+      id: body.id,
+      name: body.name,
+      emoji: body.emoji ?? "🎉",
+      startAt: body.startAt,
+      endAt: body.endAt,
+      eventCoinName: body.eventCoinName ?? "Ивент-монеты",
+      eventCoinEmoji: body.eventCoinEmoji ?? "🪙",
+      eventCoinReward: Number(body.eventCoinReward) || 1,
+      eventCrops: (body.eventCrops ?? []) as EventCropDef[],
+      shopItems: (body.shopItems ?? []) as EventShopItem[],
+    };
+    const cfg = getAdminConfig();
+    saveAdminConfig({ ...cfg, activeEvent: ev });
+    res.json({ ok: true, activeEvent: ev });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+// ── DELETE /api/admin/event ───────────────────────────────────────────────────
+router.delete("/event", (_req, res) => {
+  try {
+    const cfg = getAdminConfig();
+    saveAdminConfig({ ...cfg, activeEvent: null });
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: String(e) });

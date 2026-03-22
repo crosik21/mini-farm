@@ -1,0 +1,77 @@
+{
+  "npcTemplates": [
+    {
+      "npcName": "Бабушка Маша",
+      "npcEmoji": "👵"
+    },
+    {
+      "npcName": "Фермер Иван",
+      "npcEmoji": "👨‍🌾"
+    },
+    {
+      "npcName": "Торговец Борис",
+      "npcEmoji": "🧑‍💼"
+    },
+    {
+      "npcName": "Повар Никита",
+      "npcEmoji": "👨‍🍳"
+    },
+    {
+      "npcName": "Покупатель Аня",
+      "npcEmoji": "👩"
+    }
+  ],
+  "dailyQuestTemplates": [
+    {
+      "id": "daily_harvest_wheat",
+      "title": "Сбор пшеницы",
+      "description": "Собери 5 пшеницы",
+      "goal": {
+        "action": "harvest",
+        "target": "wheat",
+        "amount": 5
+      },
+      "rewardCoins": 40,
+      "rewardXp": 20
+    },
+    {
+      "id": "daily_harvest_3",
+      "title": "Трудяга",
+      "description": "Собери 3 любых урожая",
+      "goal": {
+        "action": "harvest",
+        "target": "any",
+        "amount": 3
+      },
+      "rewardCoins": 30,
+      "rewardXp": 15
+    },
+    {
+      "id": "daily_sell_50",
+      "title": "Торговый день",
+      "description": "Продай урожай на 50 монет",
+      "goal": {
+        "action": "sell_any",
+        "target": "coins",
+        "amount": 50
+      },
+      "rewardCoins": 50,
+      "rewardXp": 25
+    },
+    {
+      "id": "daily_plant_5",
+      "title": "Сей больше",
+      "description": "Посади 5 любых культур",
+      "goal": {
+        "action": "plant",
+        "target": "any",
+        "amount": 5
+      },
+      "rewardCoins": 35,
+      "rewardXp": 18
+    }
+  ],
+  "cropOverrides": {},
+  "customCrops": {},
+  "activeEvent": null
+}

@@ -22,7 +22,7 @@ import {
   type Achievement,
 } from "@workspace/db";
 import { eq, and, inArray, sql } from "drizzle-orm";
-import { getAdminConfig, DEFAULT_SHOP_GLOBAL } from "../admin-config";
+import { getAdminConfig, saveAdminConfig, DEFAULT_SHOP_GLOBAL, type SeasonalEventDef } from "../admin-config";
 
 const router: IRouter = Router();
 
@@ -174,6 +174,45 @@ const SEASONS_ORDER: Season[] = ["spring", "summer", "autumn", "winter"];
 const SEASON_DURATION_MS = 2 * 60 * 60 * 1000; // 2 hours per season
 
 const ENERGY_REGEN_INTERVAL_MS = 5 * 60 * 1000; // 1 energy per 5 min
+
+// ─────────────────────────────── Weather System ───────────────────────────────
+type WeatherType = "sunny" | "rainy" | "storm";
+
+const WEATHER_EPOCH_MS = 30 * 60 * 1000; // 30-minute weather cycles
+
+const WEATHER_GROW_MULT: Record<WeatherType, number> = {
+  sunny: 1.0,
+  rainy: 0.8,  // 20% faster growth
+  storm: 0.6,  // 40% faster growth
+};
+
+const WEATHER_CONFIG: Record<WeatherType, { label: string; emoji: string; tip: string }> = {
+  sunny: { label: "Солнечно",  emoji: "☀️",  tip: "Стандартные условия" },
+  rainy: { label: "Дождь",     emoji: "🌧️",  tip: "+20% скорость роста" },
+  storm: { label: "Гроза",     emoji: "⛈️",  tip: "+40% скорость роста, 10% шанс потери урожая" },
+};
+
+const STORM_SPOIL_CHANCE = 0.10;
+
+function getCurrentWeather(): WeatherType {
+  const epoch = Math.floor(Date.now() / WEATHER_EPOCH_MS);
+  const rng = seededRand(epoch * 31337 + 99991);
+  const roll = rng();
+  if (roll < 0.50) return "sunny";
+  if (roll < 0.80) return "rainy";
+  return "storm";
+}
+
+function getActiveEvent(): (SeasonalEventDef & { isActive: boolean; msLeft: number }) | null {
+  const ev = getAdminConfig().activeEvent;
+  if (!ev) return null;
+  const now = Date.now();
+  const start = new Date(ev.startAt).getTime();
+  const end = new Date(ev.endAt).getTime();
+  if (isNaN(start) || isNaN(end)) return null;
+  const isActive = now >= start && now <= end;
+  return { ...ev, isActive, msLeft: Math.max(0, end - now) };
+}
 
 // ─────────────────────────────── Premium Item Config ──────────────────────────
 const ITEM_CONFIG = {
@@ -962,6 +1001,19 @@ async function getOrCreateFarm(telegramId: string) {
   return newFarm;
 }
 
+// ─────────────────────────────────── GET Current Weather & Event ──────────────
+
+router.get("/current-event", (_req, res) => {
+  const weather = getCurrentWeather();
+  const event = getActiveEvent();
+  return res.json({
+    currentWeather: weather,
+    weatherConfig: WEATHER_CONFIG[weather],
+    weatherGrowMult: WEATHER_GROW_MULT[weather],
+    activeEvent: event?.isActive ? event : null,
+  });
+});
+
 // ─────────────────────────────────── GET Farm State ───────────────────────────
 
 router.get("/:telegramId", async (req, res) => {
@@ -1037,6 +1089,9 @@ router.post("/:telegramId/action", async (req, res) => {
     let worlds: WorldsData = JSON.parse(JSON.stringify((farm.worlds as WorldsData) || defaultWorlds()));
     let activeWorldId: WorldId = (farm.activeWorldId as WorldId) || "main";
     const worldCfg = WORLD_CONFIG[activeWorldId];
+    const currentWeather = getCurrentWeather();
+    const activeEvent = getActiveEvent();
+    let eventCoins: number = (farm.eventCoins as number) ?? 0;
 
     // ── PLANT ──────────────────────────────────────────────────────────────────
     if (action === "plant") {
@@ -1049,7 +1104,7 @@ router.post("/:telegramId/action", async (req, res) => {
       if (!cfg) return res.status(400).json({ error: "Неизвестная культура" });
       if (energy < PLANT_ENERGY) return res.status(400).json({ error: `Нужно ${PLANT_ENERGY} энергии для посадки` });
 
-      const growMult = (SEASON_GROWTH_MULTIPLIER[season] ?? 1) * worldCfg.growMultiplier;
+      const growMult = (SEASON_GROWTH_MULTIPLIER[season] ?? 1) * worldCfg.growMultiplier * WEATHER_GROW_MULT[currentWeather];
       const growSec = Math.ceil(cfg.growSec * growMult);
       const now = new Date();
       const readyAt = new Date(now.getTime() + growSec * 1000);
@@ -1066,16 +1121,27 @@ router.post("/:telegramId/action", async (req, res) => {
       if (!plot || plot.status !== "ready" || !plot.cropType) return res.status(400).json({ error: "Урожай ещё не готов" });
       if (energy < HARVEST_ENERGY) return res.status(400).json({ error: `Нужно ${HARVEST_ENERGY} энергии для сбора` });
 
-      const cfg = getActiveCropConfig()[plot.cropType];
-      const sellMult = SEASON_SELL_MULTIPLIER[season] ?? 1;
-      const extraDouble = worldCfg.doubleChanceBonus > 0 && Math.random() < worldCfg.doubleChanceBonus;
-      const harvestQty = (plot.doubleHarvest || extraDouble) ? 2 : 1;
-      inventory[plot.cropType as keyof CropInventory] = (inventory[plot.cropType as keyof CropInventory] ?? 0) + harvestQty;
-      xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier);
-      energy -= HARVEST_ENERGY;
-      plots = plots.map((p) => p.id === plotId ? { ...p, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null, doubleHarvest: undefined } : p);
-      quests = updateQuestProgress(quests, "harvest", plot.cropType, harvestQty);
-      await updateAchievementProgress(telegramId, "harvest", harvestQty);
+      // Storm spoil: 10% chance crop is destroyed
+      if (currentWeather === "storm" && Math.random() < STORM_SPOIL_CHANCE) {
+        energy -= HARVEST_ENERGY;
+        plots = plots.map((p) => p.id === plotId ? { ...p, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null, doubleHarvest: undefined } : p);
+      } else {
+        const cfg = getActiveCropConfig()[plot.cropType];
+        const sellMult = SEASON_SELL_MULTIPLIER[season] ?? 1;
+        const extraDouble = worldCfg.doubleChanceBonus > 0 && Math.random() < worldCfg.doubleChanceBonus;
+        const harvestQty = (plot.doubleHarvest || extraDouble) ? 2 : 1;
+        inventory[plot.cropType as keyof CropInventory] = (inventory[plot.cropType as keyof CropInventory] ?? 0) + harvestQty;
+        xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier);
+        energy -= HARVEST_ENERGY;
+        plots = plots.map((p) => p.id === plotId ? { ...p, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null, doubleHarvest: undefined } : p);
+        quests = updateQuestProgress(quests, "harvest", plot.cropType, harvestQty);
+        await updateAchievementProgress(telegramId, "harvest", harvestQty);
+        // Event coin reward for event crops
+        if (activeEvent?.isActive) {
+          const isEventCrop = activeEvent.eventCrops.some((c) => c.id === plot.cropType);
+          if (isEventCrop) eventCoins += activeEvent.eventCoinReward * harvestQty;
+        }
+      }
 
     // ── HARVEST ALL ────────────────────────────────────────────────────────────
     } else if (action === "harvest_all") {
@@ -1086,15 +1152,25 @@ router.post("/:telegramId/action", async (req, res) => {
       let totalHarvested = 0;
       for (const plot of readyPlots) {
         if (energy < HARVEST_ENERGY) break;
+        energy -= HARVEST_ENERGY;
+        // Storm spoil check per plot
+        if (currentWeather === "storm" && Math.random() < STORM_SPOIL_CHANCE) {
+          harvestedIds.push(plot.id);
+          continue;
+        }
         const cfg = getActiveCropConfig()[plot.cropType!];
         const extraDouble = worldCfg.doubleChanceBonus > 0 && Math.random() < worldCfg.doubleChanceBonus;
         const harvestQty = (plot.doubleHarvest || extraDouble) ? 2 : 1;
         inventory[plot.cropType as keyof CropInventory] = (inventory[plot.cropType as keyof CropInventory] ?? 0) + harvestQty;
         xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier);
-        energy -= HARVEST_ENERGY;
         quests = updateQuestProgress(quests, "harvest", plot.cropType!, harvestQty);
         harvestedIds.push(plot.id);
         totalHarvested += harvestQty;
+        // Event coin reward for event crops
+        if (activeEvent?.isActive) {
+          const isEventCrop = activeEvent.eventCrops.some((c) => c.id === plot.cropType);
+          if (isEventCrop) eventCoins += activeEvent.eventCoinReward * harvestQty;
+        }
       }
       if (totalHarvested > 0) await updateAchievementProgress(telegramId, "harvest", totalHarvested);
       plots = plots.map((p) =>
@@ -1675,6 +1751,34 @@ router.post("/:telegramId/action", async (req, res) => {
       const playerAchsAch = await getPlayerAchievements(telegramId);
       return res.json({ ...farmOutAch, achievements: buildAchievementsResponse(playerAchsAch) });
 
+    // ── BUY EVENT CROP SEED ────────────────────────────────────────────────────
+    } else if (action === "buy_event_crop_seed") {
+      const { cropType: eventCropId, quantity: qty } = req.body as { cropType: string; quantity?: number };
+      const ev = getActiveEvent();
+      if (!ev?.isActive) return res.status(400).json({ error: "Ивент не активен" });
+      const evCrop = ev.eventCrops.find((c) => c.id === eventCropId);
+      if (!evCrop) return res.status(400).json({ error: "Культура недоступна в ивенте" });
+      const buyQty = Math.max(1, Math.min(qty ?? 1, 99));
+      const totalCost = evCrop.seedCostCoins * buyQty;
+      if (coins < totalCost) return res.status(400).json({ error: `Нужно ${totalCost} монет` });
+      coins -= totalCost;
+      seeds[eventCropId as keyof CropInventory] = ((seeds[eventCropId as keyof CropInventory] as number) ?? 0) + buyQty;
+
+    // ── SPEND EVENT COINS ────────────────────────────────────────────────────────
+    } else if (action === "spend_event_coins") {
+      const { itemId } = req.body as { itemId: string };
+      const ev = getActiveEvent();
+      if (!ev?.isActive) return res.status(400).json({ error: "Ивент не активен" });
+      const shopItem = ev.shopItems.find((i) => i.id === itemId);
+      if (!shopItem) return res.status(400).json({ error: "Товар не найден" });
+      if (eventCoins < shopItem.cost) return res.status(400).json({ error: `Нужно ${shopItem.cost} ${ev.eventCoinEmoji} event-монет` });
+      eventCoins -= shopItem.cost;
+      if (shopItem.rewardCoins) coins += shopItem.rewardCoins;
+      if (shopItem.rewardGems) gems += shopItem.rewardGems;
+      if (shopItem.rewardSeedType && shopItem.rewardSeedQty) {
+        seeds[shopItem.rewardSeedType as keyof CropInventory] = ((seeds[shopItem.rewardSeedType as keyof CropInventory] as number) ?? 0) + shopItem.rewardSeedQty;
+      }
+
     // ── OPEN CASE ───────────────────────────────────────────────────────────────
     } else if (action === "open_case") {
       const { caseId } = req.body;
@@ -1764,6 +1868,7 @@ router.post("/:telegramId/action", async (req, res) => {
       animals, buildings, products, inventory, seeds,
       quests, npcOrders, items, activeSprinklers,
       worlds, activeWorldId,
+      eventCoins,
       updatedAt: new Date(),
     }).where(eq(farmStateTable.telegramId, telegramId));
 
@@ -1820,6 +1925,8 @@ function serializeFarm(farm: any, telegramId: string) {
   const now = new Date();
   const activeSprinklers = ((farm.activeSprinklers as ActiveSprinkler[]) || [])
     .filter((s) => new Date(s.expiresAt) > now);
+  const weather = getCurrentWeather();
+  const event = getActiveEvent();
   return {
     telegramId,
     coins: farm.coins,
@@ -1857,6 +1964,11 @@ function serializeFarm(farm: any, telegramId: string) {
     lastLoginDate: farm.lastLoginDate ?? "",
     streakRewardDay: farm.streakRewardDay ?? 0,
     streakRewards: STREAK_REWARDS,
+    eventCoins: farm.eventCoins ?? 0,
+    currentWeather: weather,
+    weatherConfig: WEATHER_CONFIG[weather],
+    weatherGrowMult: WEATHER_GROW_MULT[weather],
+    activeEvent: event?.isActive ? event : null,
     updatedAt: farm.updatedAt instanceof Date ? farm.updatedAt.toISOString() : farm.updatedAt,
   };
 }

@@ -93,8 +93,13 @@ export function PlantModal({ isOpen, onClose, plotId, farm }: PlantModalProps) {
                 </span>
 
                 <span className="text-[10px] text-muted-foreground mt-0.5">
-                  {crop.growTimeSec >= 60 ? `${Math.floor(crop.growTimeSec / 60)} мин` : `${crop.growTimeSec} сек`}
-                  {" · "} →🪙{crop.sellPrice}
+                  {(() => {
+                    const wMult = farm.weatherGrowMult ?? 1;
+                    const adjSec = Math.ceil(crop.growTimeSec * wMult);
+                    const label = adjSec >= 60 ? `${Math.floor(adjSec / 60)} мин` : `${adjSec} сек`;
+                    const weatherIcon = (farm.currentWeather === "rainy" ? "🌧️" : farm.currentWeather === "storm" ? "⛈️" : null);
+                    return <>{weatherIcon}{weatherIcon ? " " : ""}{label}{" · "}→🪙{crop.sellPrice}</>;
+                  })()}
                 </span>
 
                 {hasSeeds && noEnergy && (

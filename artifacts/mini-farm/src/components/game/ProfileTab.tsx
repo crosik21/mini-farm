@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FarmData, AchievementState } from "@/lib/types";
-import { getLevelProgress, SEASON_CONFIG, ITEM_NAMES, ITEM_EMOJIS } from "@/lib/constants";
-import { Star, Wheat, Cat, Factory, Zap, Gem, Trophy, Sprout, Copy, ChevronDown, ChevronUp, Globe, Package, Tag, Flame, Clock } from "lucide-react";
+import { getLevelProgress, SEASON_CONFIG, ITEM_NAMES, ITEM_EMOJIS, MEDALS, MEDAL_RARITY_STYLE } from "@/lib/constants";
+import { Star, Wheat, Cat, Factory, Zap, Gem, Trophy, Sprout, Copy, ChevronDown, ChevronUp, Globe, Package, Tag, Flame, Clock, Medal } from "lucide-react";
 import { EmojiImg } from "@/components/ui/emoji-img";
 import { useToast } from "@/hooks/use-toast";
 import { useFarmAction } from "@/hooks/use-farm";
@@ -96,6 +96,25 @@ export function ProfileTab({ farm }: { farm: FarmData }) {
   const { mutate: farmMutate, isPending: promoLoading } = useFarmAction();
   const { mutate: claimAch, isPending: claimingAch } = useFarmAction();
   const { mutate: claimStreak, isPending: claimingStreak } = useFarmAction();
+  const { mutate: equipMedal, isPending: equipingMedal } = useFarmAction();
+  const [showMedals, setShowMedals] = useState(true);
+  const [equipPending, setEquipPending] = useState<string | null>(null);
+
+  const medals = farm.medals ?? { earned: [], equipped: null };
+  const earnedIds = new Set(medals.earned.map((m) => m.id));
+  const equippedMedalDef = medals.equipped ? MEDALS.find((m) => m.id === medals.equipped) : null;
+
+  const handleEquipMedal = (medalId: string | null) => {
+    if (equipingMedal) return;
+    setEquipPending(medalId);
+    equipMedal(
+      { action: "equip_medal", medalId },
+      {
+        onSuccess: () => { setEquipPending(null); toast({ title: medalId ? "🏅 Медаль экипирована!" : "Медаль снята" }); },
+        onError: () => { setEquipPending(null); toast({ title: "Ошибка", variant: "destructive" }); },
+      }
+    );
+  };
 
   const completedQuests = farm.quests.filter((q) => q.claimed).length;
   const totalQuests = farm.quests.length;
@@ -190,6 +209,14 @@ export function ProfileTab({ farm }: { farm: FarmData }) {
           <Copy size={10} /> ID: {farm.telegramId}
         </button>
 
+        {/* Equipped medal badge */}
+        {equippedMedalDef && (
+          <div className={`mt-2 flex items-center gap-2 px-4 py-1.5 rounded-full border-2 shadow-md ${MEDAL_RARITY_STYLE[equippedMedalDef.rarity].border} ${MEDAL_RARITY_STYLE[equippedMedalDef.rarity].bg}`}>
+            <span className="text-lg leading-none">{equippedMedalDef.emoji}</span>
+            <span className={`text-xs font-black ${MEDAL_RARITY_STYLE[equippedMedalDef.rarity].text}`}>{equippedMedalDef.name}</span>
+          </div>
+        )}
+
         {/* Coins & Gems */}
         <div className="flex items-center gap-3 mt-3">
           <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 dark:bg-amber-950 dark:border-amber-800 rounded-full px-3.5 py-1.5">
@@ -271,6 +298,73 @@ export function ProfileTab({ farm }: { farm: FarmData }) {
             <StatCard key={card.label} {...card} />
           ))}
         </div>
+      </motion.div>
+
+      {/* ── Medals section ── */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.115 }}
+        className="bg-card border border-border rounded-2xl p-4 shadow-sm mb-3"
+      >
+        <SectionHeader open={showMedals} onToggle={() => setShowMedals(!showMedals)}>
+          <Medal size={14} className="text-yellow-500" /> Медали ({medals.earned.length}/{MEDALS.length})
+        </SectionHeader>
+        <AnimatePresence initial={false}>
+          {showMedals && (
+            <motion.div
+              key="medals-panel"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.22 }}
+              className="overflow-hidden"
+            >
+              {medals.equipped && (
+                <button
+                  onClick={() => handleEquipMedal(null)}
+                  className="mt-2 mb-3 w-full text-[10px] text-muted-foreground underline underline-offset-2"
+                  disabled={equipingMedal}
+                >
+                  Снять медаль
+                </button>
+              )}
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                {MEDALS.map((medal) => {
+                  const has = earnedIds.has(medal.id);
+                  const isEquipped = medals.equipped === medal.id;
+                  const style = MEDAL_RARITY_STYLE[medal.rarity];
+                  return (
+                    <button
+                      key={medal.id}
+                      disabled={!has || equipingMedal}
+                      onClick={() => has && !isEquipped && handleEquipMedal(medal.id)}
+                      className={`relative flex items-start gap-2.5 rounded-xl border-2 p-2.5 text-left transition-all
+                        ${has ? `${style.border} ${style.bg} ${isEquipped ? "ring-2 ring-offset-1 ring-yellow-400" : "hover:brightness-95"}` : "border-border bg-muted/30 opacity-50 cursor-default"}`}
+                    >
+                      <div className={`text-2xl leading-none mt-0.5 ${!has ? "grayscale" : ""}`}>{medal.emoji}</div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-[11px] font-black leading-tight ${has ? style.text : "text-muted-foreground"}`}>{medal.name}</p>
+                        <p className="text-[9px] text-muted-foreground leading-tight mt-0.5 line-clamp-2">{has ? medal.description : medal.hint}</p>
+                        <p className={`text-[9px] font-bold mt-1 ${style.text}`}>{style.label}</p>
+                      </div>
+                      {isEquipped && (
+                        <div className="absolute top-1.5 right-1.5 bg-yellow-400 text-yellow-900 text-[8px] font-black px-1.5 py-0.5 rounded-full leading-none">
+                          ✓
+                        </div>
+                      )}
+                      {equipPending === medal.id && (
+                        <div className="absolute inset-0 rounded-xl bg-white/40 dark:bg-black/30 flex items-center justify-center">
+                          <div className="w-4 h-4 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin" />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
 
       {/* ── Seeds inventory ── */}

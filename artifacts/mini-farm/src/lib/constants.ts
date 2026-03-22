@@ -315,6 +315,36 @@ export interface SkinDef {
   free?: boolean;
 }
 
+export interface MedalDef {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  rarity: "bronze" | "silver" | "gold" | "legendary";
+  hint: string;
+}
+
+export const MEDALS: MedalDef[] = [
+  { id: "first_harvest",   emoji: "🌱", name: "Первый росток",    rarity: "bronze",    description: "Собрал первый урожай",                      hint: "Собери любой урожай" },
+  { id: "streak_7",        emoji: "🔥", name: "Огонь стрика",     rarity: "bronze",    description: "7 дней подряд в игре",                       hint: "Заходи 7 дней подряд" },
+  { id: "coins_5000",      emoji: "💰", name: "Богатый фермер",   rarity: "silver",    description: "Накопил 5 000 монет",                        hint: "Накопи 5 000 монет" },
+  { id: "fish_10",         emoji: "🎣", name: "Рыбный барон",     rarity: "silver",    description: "Поймал 10 рыб",                              hint: "Налови 10 рыб" },
+  { id: "level_5",         emoji: "⭐", name: "Опытный фермер",   rarity: "silver",    description: "Достиг 5 уровня",                            hint: "Прокачайся до уровня 5" },
+  { id: "streak_30",       emoji: "🔥🔥","name": "Несгибаемый",  rarity: "gold",      description: "30 дней подряд в игре",                      hint: "Заходи 30 дней подряд" },
+  { id: "harvest_200",     emoji: "🏆", name: "Легенда жатвы",    rarity: "gold",      description: "Собрал урожай 200 раз",                      hint: "Собери урожай 200 раз" },
+  { id: "level_10",        emoji: "🌟", name: "Мастер фермы",     rarity: "gold",      description: "Достиг 10 уровня",                           hint: "Прокачайся до уровня 10" },
+  { id: "playtime_3h",     emoji: "⏱️", name: "Преданный",        rarity: "gold",      description: "Провёл 3 часа в игре",                       hint: "Проведи 3+ часа в игре" },
+  { id: "golden_skin",     emoji: "✨", name: "Избранный",         rarity: "legendary", description: "Разблокировал золотой скин",                  hint: "Купи золотой скин фермы" },
+  { id: "gems_100",        emoji: "💎", name: "Кристальный лорд", rarity: "legendary", description: "Накопил 100 кристаллов",                      hint: "Накопи 100 кристаллов" },
+];
+
+export const MEDAL_RARITY_STYLE: Record<string, { border: string; bg: string; text: string; glow: string; label: string }> = {
+  bronze:    { border: "border-amber-600",  bg: "bg-amber-50 dark:bg-amber-950/30",    text: "text-amber-700 dark:text-amber-400",   glow: "shadow-amber-400/30",   label: "Бронза" },
+  silver:    { border: "border-slate-400",  bg: "bg-slate-50 dark:bg-slate-800/40",    text: "text-slate-600 dark:text-slate-300",   glow: "shadow-slate-400/30",   label: "Серебро" },
+  gold:      { border: "border-yellow-400", bg: "bg-yellow-50 dark:bg-yellow-950/30",  text: "text-yellow-600 dark:text-yellow-400", glow: "shadow-yellow-400/40",  label: "Золото" },
+  legendary: { border: "border-purple-500", bg: "bg-purple-50 dark:bg-purple-950/30",  text: "text-purple-600 dark:text-purple-400", glow: "shadow-purple-500/50",  label: "Легенда" },
+};
+
 export const SKINS: SkinDef[] = [
   { id: "default",  name: "Стандарт",       emoji: "🌿", description: "Классическое поле по сезону", bg1: "", bg2: "", free: true },
   { id: "green",    name: "Зелёная долина",  emoji: "🍀", description: "Сочная зелёная трава круглый год", bg1: "#c8f0a0", bg2: "#84cc16", priceCoin: 800 },

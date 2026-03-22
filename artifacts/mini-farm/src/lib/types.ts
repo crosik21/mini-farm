@@ -303,6 +303,7 @@ export interface FarmData {
   activeSkin: string;
   ownedSkins: string[];
   totalPlaySeconds: number;
+  medals: { earned: { id: string; earnedAt: string }[]; equipped: string | null };
   updatedAt: string;
 }
 
@@ -396,4 +397,5 @@ export type FarmAction =
   | { action: "claim_pass_reward"; passLevel: number; track: "free" | "premium" }
   | { action: "buy_skin"; skinId: string }
   | { action: "equip_skin"; skinId: string }
-  | { action: "record_playtime"; seconds: number };
+  | { action: "record_playtime"; seconds: number }
+  | { action: "equip_medal"; medalId: string | null };

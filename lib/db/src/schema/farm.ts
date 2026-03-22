@@ -41,6 +41,7 @@ export const farmStateTable = pgTable("farm_states", {
   activeSkin: text("active_skin").default("default"),
   ownedSkins: jsonb("owned_skins").$type<string[]>(),
   totalPlaySeconds: integer("total_play_seconds").notNull().default(0),
+  medals: jsonb("medals").$type<{ earned: { id: string; earnedAt: string }[]; equipped: string | null }>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

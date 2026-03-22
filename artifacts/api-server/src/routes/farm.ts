@@ -1232,7 +1232,8 @@ router.get("/:telegramId", async (req, res) => {
 
     const playerAchs = await getPlayerAchievements(telegramId);
     const farmPassData = await getOrCreateFarmPass(telegramId);
-    res.json({ ...serializeFarm(farm, telegramId), farmPass: serializeFarmPass(farmPassData), achievements: buildAchievementsResponse(playerAchs) });
+    const initMedals = await checkAndAwardMedals(telegramId, farm);
+    res.json({ ...serializeFarm({ ...farm, medals: initMedals }, telegramId), farmPass: serializeFarmPass(farmPassData), achievements: buildAchievementsResponse(playerAchs) });
   } catch (err) {
     console.error("getFarmState error:", err);
     res.status(500).json({ error: "Internal server error" });
@@ -2295,7 +2296,8 @@ router.post("/:telegramId/action", async (req, res) => {
         .where(eq(farmStateTable.telegramId, telegramId));
       const playerAchsBs = await getPlayerAchievements(telegramId);
       const farmPassBs = await getOrCreateFarmPass(telegramId);
-      return res.json({ ...serializeFarm({ ...farm, coins, gems, ownedSkins: newOwned, activeSkin: skinId }, telegramId), farmPass: serializeFarmPass(farmPassBs), achievements: buildAchievementsResponse(playerAchsBs) });
+      const medalsBs = await checkAndAwardMedals(telegramId, { ...farm, coins, gems, ownedSkins: newOwned });
+      return res.json({ ...serializeFarm({ ...farm, coins, gems, ownedSkins: newOwned, activeSkin: skinId, medals: medalsBs }, telegramId), farmPass: serializeFarmPass(farmPassBs), achievements: buildAchievementsResponse(playerAchsBs) });
 
     } else if (action === "equip_skin") {
       const { skinId } = body;
@@ -2313,7 +2315,21 @@ router.post("/:telegramId/action", async (req, res) => {
       const newTotal = (farm.totalPlaySeconds ?? 0) + Math.floor(seconds);
       await db.update(farmStateTable).set({ totalPlaySeconds: newTotal, updatedAt: new Date() })
         .where(eq(farmStateTable.telegramId, telegramId));
-      return res.json({ ok: true, totalPlaySeconds: newTotal });
+      const updatedMedalsRp = await checkAndAwardMedals(telegramId, { ...farm, totalPlaySeconds: newTotal });
+      return res.json({ ok: true, totalPlaySeconds: newTotal, medals: updatedMedalsRp });
+
+    } else if (action === "equip_medal") {
+      const { medalId } = body;
+      const medalsData: MedalData = (farm.medals as MedalData) ?? emptyMedals();
+      if (medalId !== null && !medalsData.earned.some((m) => m.id === medalId)) {
+        return res.status(400).json({ error: "Медаль не получена" });
+      }
+      const updated: MedalData = { ...medalsData, equipped: medalId ?? null };
+      await db.update(farmStateTable).set({ medals: updated, updatedAt: new Date() })
+        .where(eq(farmStateTable.telegramId, telegramId));
+      const playerAchsEm = await getPlayerAchievements(telegramId);
+      const farmPassEm = await getOrCreateFarmPass(telegramId);
+      return res.json({ ...serializeFarm({ ...farm, medals: updated }, telegramId), farmPass: serializeFarmPass(farmPassEm), achievements: buildAchievementsResponse(playerAchsEm) });
 
     } else {
       return res.status(400).json({ error: "Неизвестное действие" });
@@ -2348,7 +2364,9 @@ router.post("/:telegramId/action", async (req, res) => {
 
     const playerAchs = await getPlayerAchievements(telegramId);
     const farmPass = await getOrCreateFarmPass(telegramId);
-    res.json({ ...serializeFarm({ ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, eventCoins, toolTiers }, telegramId), farmPass: serializeFarmPass(farmPass), achievements: buildAchievementsResponse(playerAchs) });
+    const updatedFarmForMedals = { ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, eventCoins, toolTiers };
+    const updatedMedals = await checkAndAwardMedals(telegramId, updatedFarmForMedals);
+    res.json({ ...serializeFarm({ ...updatedFarmForMedals, medals: updatedMedals }, telegramId), farmPass: serializeFarmPass(farmPass), achievements: buildAchievementsResponse(playerAchs) });
   } catch (err) {
     console.error("performFarmAction error:", err);
     res.status(500).json({ error: "Internal server error" });
@@ -2448,8 +2466,69 @@ function serializeFarm(farm: any, telegramId: string) {
     activeSkin: (farm.activeSkin as string) ?? "default",
     ownedSkins: (farm.ownedSkins as string[]) ?? [],
     totalPlaySeconds: (farm.totalPlaySeconds as number) ?? 0,
+    medals: (farm.medals as { earned: { id: string; earnedAt: string }[]; equipped: string | null }) ?? { earned: [], equipped: null },
     updatedAt: farm.updatedAt instanceof Date ? farm.updatedAt.toISOString() : farm.updatedAt,
   };
+}
+
+// ── Medal award logic ──────────────────────────────────────────────────────────
+type MedalData = { earned: { id: string; earnedAt: string }[]; equipped: string | null };
+
+function emptyMedals(): MedalData { return { earned: [], equipped: null }; }
+
+async function checkAndAwardMedals(
+  telegramId: string,
+  farm: any,
+  { harvestTotal, fishTotal }: { harvestTotal?: number; fishTotal?: number } = {}
+): Promise<MedalData> {
+  const medals: MedalData = (farm.medals as MedalData) ?? emptyMedals();
+  const earned = new Set(medals.earned.map((m) => m.id));
+  const newMedals: { id: string; earnedAt: string }[] = [];
+
+  const award = (id: string) => {
+    if (!earned.has(id)) {
+      earned.add(id);
+      newMedals.push({ id, earnedAt: new Date().toISOString() });
+    }
+  };
+
+  // Harvest first
+  const achievements: any[] = (await db.select().from(achievementsTable)
+    .where(eq(achievementsTable.telegramId, telegramId))).map((a) => a);
+  const harvestAch = achievements.find((a) => a.achievementId === "harvest_first");
+  if (harvestAch?.progress >= 1 || (harvestTotal ?? 0) >= 1) award("first_harvest");
+  const harvest200Ach = achievements.find((a) => a.achievementId === "harvest_200");
+  if (harvest200Ach?.progress >= 200 || (harvestTotal ?? 0) >= 200) award("harvest_200");
+
+  // Streak
+  if ((farm.loginStreak ?? 0) >= 7)  award("streak_7");
+  if ((farm.loginStreak ?? 0) >= 30) award("streak_30");
+
+  // Coins & gems (real-time)
+  if ((farm.coins ?? 0) >= 5000)  award("coins_5000");
+  if ((farm.gems ?? 0)  >= 100)   award("gems_100");
+
+  // Level
+  if ((farm.level ?? 1) >= 5)  award("level_5");
+  if ((farm.level ?? 1) >= 10) award("level_10");
+
+  // Fish
+  const fishInventory: Record<string, number> = (farm.fishInventory as Record<string, number>) ?? {};
+  const totalFish = (fishTotal ?? 0) + Object.values(fishInventory).reduce((s, v) => s + v, 0);
+  if (totalFish >= 10) award("fish_10");
+
+  // Playtime
+  if ((farm.totalPlaySeconds ?? 0) >= 3 * 3600) award("playtime_3h");
+
+  // Golden skin
+  const ownedSkins: string[] = (farm.ownedSkins as string[]) ?? [];
+  if (ownedSkins.includes("golden")) award("golden_skin");
+
+  if (newMedals.length === 0) return medals;
+
+  const updated: MedalData = { earned: [...medals.earned, ...newMedals], equipped: medals.equipped };
+  await db.update(farmStateTable).set({ medals: updated }).where(eq(farmStateTable.telegramId, telegramId));
+  return updated;
 }
 
 export default router;

@@ -21,6 +21,7 @@ import { CasesTab } from "@/components/game/CasesTab";
 import { StreakModal } from "@/components/game/StreakModal";
 import { FishingTab } from "@/components/game/FishingTab";
 import { MarketplaceTab } from "@/components/game/MarketplaceTab";
+import { FarmPassTab } from "@/components/game/FarmPassTab";
 import { Sprout, Cat, Factory } from "lucide-react";
 
 interface FloatingReward {
@@ -1261,6 +1262,12 @@ export default function FarmGame() {
           {activeTab === "marketplace" && (
             <motion.div key="marketplace" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
               <MarketplaceTab farm={farm} />
+            </motion.div>
+          )}
+
+          {activeTab === "pass" && (
+            <motion.div key="pass" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }} className="flex flex-col flex-1 min-h-full">
+              <FarmPassTab farm={farm} />
             </motion.div>
           )}
 

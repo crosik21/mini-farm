@@ -296,7 +296,55 @@ export interface FarmData {
   weatherGrowMult: number;
   activeEvent: ActiveEventInfo | null;
   fishInventory: Record<string, number>;
+  toolTiers: ToolTiers;
+  toolTierConfig: Record<"watering_can" | "sprinkler", ToolTierDef[]>;
+  farmPass: FarmPass | null;
   updatedAt: string;
+}
+
+export type ToolTierDef = {
+  name: string;
+  emoji: string;
+  coinCost: number;
+  gemCost: number;
+  growthReduction: number;
+  doubleChance: number;
+  plotsAffected?: number;
+  durationMs?: number;
+  bonusDesc: string;
+};
+
+export type ToolTiers = {
+  watering_can: 0 | 1 | 2;
+  sprinkler: 0 | 1 | 2;
+};
+
+export type PassReward = {
+  type: "coins" | "gems" | "seeds" | "pet";
+  amount?: number;
+  seedType?: string;
+  seedQty?: number;
+  petType?: string;
+};
+
+export type PassLevelReward = {
+  level: number;
+  free: PassReward;
+  premium: PassReward;
+};
+
+export interface FarmPass {
+  seasonId: string;
+  xp: number;
+  level: number;
+  isPremium: boolean;
+  freeTrackClaimed: number[];
+  premiumTrackClaimed: number[];
+  rewards: PassLevelReward[];
+  xpPerLevel: number;
+  maxLevel: number;
+  seasonStartAt: string;
+  seasonEndAt: string;
 }
 
 export type FarmAction =
@@ -328,4 +376,7 @@ export type FarmAction =
   | { action: "claim_streak_reward" }
   | { action: "claim_achievement"; achievementId: string }
   | { action: "buy_event_crop_seed"; cropType: string; quantity: number }
-  | { action: "spend_event_coins"; itemId: string };
+  | { action: "spend_event_coins"; itemId: string }
+  | { action: "upgrade_tool"; toolType: "watering_can" | "sprinkler" }
+  | { action: "buy_premium_pass" }
+  | { action: "claim_pass_reward"; passLevel: number; track: "free" | "premium" };

@@ -7,6 +7,7 @@ import {
   promocodeUsesTable,
   referralsTable,
   achievementsTable,
+  farmPassTable,
   type PlotState,
   type CropInventory,
   type AnimalState,
@@ -20,6 +21,8 @@ import {
   type WorldId,
   type WorldsData,
   type Achievement,
+  type ToolTiers,
+  type FarmPass,
 } from "@workspace/db";
 import { eq, and, inArray, sql } from "drizzle-orm";
 import { getAdminConfig, saveAdminConfig, DEFAULT_SHOP_GLOBAL, type SeasonalEventDef } from "../admin-config";
@@ -243,6 +246,140 @@ const ITEM_CONFIG = {
 
 function emptyItems(): ItemInventory {
   return { wateringCans: 0, sprinklers: 0 };
+}
+
+function emptyToolTiers(): ToolTiers {
+  return { watering_can: 0, sprinkler: 0 };
+}
+
+// ─────────────────────────────── Tool Tier Config ─────────────────────────────
+
+type ToolTierDef = {
+  name: string;
+  emoji: string;
+  coinCost: number;
+  gemCost: number;
+  growthReduction: number;
+  doubleChance: number;
+  plotsAffected?: number;
+  durationMs?: number;
+  bonusDesc: string;
+};
+
+const TOOL_TIER_CONFIG: Record<"watering_can" | "sprinkler", ToolTierDef[]> = {
+  watering_can: [
+    { name: "Обычная лейка",    emoji: "🪣", coinCost: 0,   gemCost: 0, growthReduction: 0.50, doubleChance: 0.20, bonusDesc: "−50% время роста, 20% двойной урожай" },
+    { name: "Серебряная лейка", emoji: "🪣", coinCost: 300, gemCost: 0, growthReduction: 0.65, doubleChance: 0.25, bonusDesc: "−65% время роста, 25% двойной урожай" },
+    { name: "Золотая лейка",    emoji: "✨", coinCost: 0,   gemCost: 5, growthReduction: 0.80, doubleChance: 0.30, plotsAffected: 3, bonusDesc: "−80% время роста, 30% двойной урожай, поливает 3 грядки" },
+  ],
+  sprinkler: [
+    { name: "Обычный спринклер",    emoji: "💦", coinCost: 0,   gemCost: 0, growthReduction: 0.40, doubleChance: 0.15, durationMs: 5 * 60 * 1000,  bonusDesc: "−40% время роста, 15% двойной урожай, 5 мин" },
+    { name: "Серебряный спринклер", emoji: "💦", coinCost: 400, gemCost: 0, growthReduction: 0.55, doubleChance: 0.20, durationMs: 7 * 60 * 1000,  bonusDesc: "−55% время роста, 20% двойной урожай, 7 мин" },
+    { name: "Золотой спринклер",    emoji: "⚡", coinCost: 0,   gemCost: 8, growthReduction: 0.70, doubleChance: 0.25, durationMs: 10 * 60 * 1000, bonusDesc: "−70% время роста, 25% двойной урожай, 10 мин" },
+  ],
+};
+
+// ─────────────────────────────── Farm Pass Config ─────────────────────────────
+
+const PASS_SEASON_ID = "season_1";
+const PASS_SEASON_START = new Date("2026-03-01T00:00:00Z");
+const PASS_SEASON_END   = new Date("2026-03-31T23:59:59Z");
+const PASS_XP_PER_LEVEL = 50;
+const PASS_MAX_LEVEL = 20;
+
+type PassReward = {
+  type: "coins" | "gems" | "seeds" | "pet";
+  amount?: number;
+  seedType?: string;
+  seedQty?: number;
+  petType?: string;
+};
+
+type PassLevelReward = {
+  level: number;
+  free: PassReward;
+  premium: PassReward;
+};
+
+const PASS_REWARDS: PassLevelReward[] = [
+  { level: 1,  free: { type: "coins", amount: 50  },                          premium: { type: "gems",  amount: 1  } },
+  { level: 2,  free: { type: "seeds", seedType: "wheat",      seedQty: 5  },  premium: { type: "seeds", seedType: "strawberry", seedQty: 3 } },
+  { level: 3,  free: { type: "coins", amount: 100 },                          premium: { type: "gems",  amount: 2  } },
+  { level: 4,  free: { type: "seeds", seedType: "carrot",     seedQty: 5  },  premium: { type: "seeds", seedType: "corn",       seedQty: 5 } },
+  { level: 5,  free: { type: "gems",  amount: 1   },                          premium: { type: "gems",  amount: 3  } },
+  { level: 6,  free: { type: "coins", amount: 150 },                          premium: { type: "seeds", seedType: "pumpkin",    seedQty: 3 } },
+  { level: 7,  free: { type: "seeds", seedType: "tomato",     seedQty: 5  },  premium: { type: "gems",  amount: 3  } },
+  { level: 8,  free: { type: "coins", amount: 200 },                          premium: { type: "seeds", seedType: "pumpkin",    seedQty: 5 } },
+  { level: 9,  free: { type: "seeds", seedType: "corn",       seedQty: 5  },  premium: { type: "gems",  amount: 5  } },
+  { level: 10, free: { type: "gems",  amount: 3   },                          premium: { type: "gems",  amount: 5  } },
+  { level: 11, free: { type: "coins", amount: 250 },                          premium: { type: "gems",  amount: 3  } },
+  { level: 12, free: { type: "seeds", seedType: "strawberry", seedQty: 3  },  premium: { type: "seeds", seedType: "sunflower",  seedQty: 5 } },
+  { level: 13, free: { type: "coins", amount: 300 },                          premium: { type: "gems",  amount: 5  } },
+  { level: 14, free: { type: "seeds", seedType: "sunflower",  seedQty: 3  },  premium: { type: "seeds", seedType: "strawberry", seedQty: 5 } },
+  { level: 15, free: { type: "gems",  amount: 5   },                          premium: { type: "gems",  amount: 10 } },
+  { level: 16, free: { type: "coins", amount: 350 },                          premium: { type: "seeds", seedType: "pumpkin",    seedQty: 5 } },
+  { level: 17, free: { type: "seeds", seedType: "corn",       seedQty: 5  },  premium: { type: "gems",  amount: 5  } },
+  { level: 18, free: { type: "coins", amount: 400 },                          premium: { type: "seeds", seedType: "sunflower",  seedQty: 5 } },
+  { level: 19, free: { type: "coins", amount: 500 },                          premium: { type: "gems",  amount: 10 } },
+  { level: 20, free: { type: "coins", amount: 1000 },                         premium: { type: "pet",   petType: "unicorn" } },
+];
+
+function getPassLevelFromXp(xp: number): number {
+  return Math.min(PASS_MAX_LEVEL, Math.floor(xp / PASS_XP_PER_LEVEL) + 1);
+}
+
+async function getOrCreateFarmPass(telegramId: string): Promise<FarmPass> {
+  const existing = await db
+    .select()
+    .from(farmPassTable)
+    .where(and(eq(farmPassTable.telegramId, telegramId), eq(farmPassTable.passSeasonId, PASS_SEASON_ID)))
+    .limit(1);
+  if (existing.length > 0) return existing[0];
+
+  const inserted = await db.insert(farmPassTable).values({
+    telegramId,
+    passSeasonId: PASS_SEASON_ID,
+    xp: 0,
+    level: 1,
+    freeTrackClaimed: [],
+    premiumTrackClaimed: [],
+    isPremium: false,
+  }).returning();
+  return inserted[0];
+}
+
+function serializeFarmPass(pass: FarmPass) {
+  return {
+    seasonId: pass.passSeasonId,
+    xp: pass.xp,
+    level: pass.level,
+    isPremium: pass.isPremium,
+    freeTrackClaimed: (pass.freeTrackClaimed as number[]) || [],
+    premiumTrackClaimed: (pass.premiumTrackClaimed as number[]) || [],
+    rewards: PASS_REWARDS,
+    xpPerLevel: PASS_XP_PER_LEVEL,
+    maxLevel: PASS_MAX_LEVEL,
+    seasonStartAt: PASS_SEASON_START.toISOString(),
+    seasonEndAt: PASS_SEASON_END.toISOString(),
+  };
+}
+
+const PASS_XP_ACTIONS: Record<string, number> = {
+  plant: 1,
+  harvest: 3,
+  feed_animal: 2,
+  collect_craft: 5,
+};
+
+async function addPassXp(telegramId: string, actionType: string): Promise<void> {
+  const xpGain = PASS_XP_ACTIONS[actionType];
+  if (!xpGain) return;
+  const pass = await getOrCreateFarmPass(telegramId);
+  const newXp = pass.xp + xpGain;
+  const newLevel = getPassLevelFromXp(newXp);
+  await db.update(farmPassTable)
+    .set({ xp: newXp, level: newLevel, updatedAt: new Date() })
+    .where(and(eq(farmPassTable.telegramId, telegramId), eq(farmPassTable.passSeasonId, PASS_SEASON_ID)));
 }
 
 // ─────────────────────────────── Rotating Seed Shop ───────────────────────────
@@ -1075,7 +1212,8 @@ router.get("/:telegramId", async (req, res) => {
     await setAchievementAbsolute(telegramId, "level_up", farm.level);
 
     const playerAchs = await getPlayerAchievements(telegramId);
-    res.json({ ...serializeFarm(farm, telegramId), achievements: buildAchievementsResponse(playerAchs) });
+    const farmPassData = await getOrCreateFarmPass(telegramId);
+    res.json({ ...serializeFarm(farm, telegramId), farmPass: serializeFarmPass(farmPassData), achievements: buildAchievementsResponse(playerAchs) });
   } catch (err) {
     console.error("getFarmState error:", err);
     res.status(500).json({ error: "Internal server error" });
@@ -1106,6 +1244,7 @@ router.post("/:telegramId/action", async (req, res) => {
     const products = { ...(farm.products as ProductInventory) };
     const season = farm.season as Season;
     const items: ItemInventory = { ...(farm.items as ItemInventory || emptyItems()) };
+    const toolTiers: ToolTiers = { ...(farm.toolTiers as ToolTiers || emptyToolTiers()) };
     let activeSprinklers: ActiveSprinkler[] = [...((farm.activeSprinklers as ActiveSprinkler[]) || [])];
     // Clean up expired sprinklers
     activeSprinklers = activeSprinklers.filter((s) => new Date(s.expiresAt) > new Date());
@@ -1715,16 +1854,25 @@ router.post("/:telegramId/action", async (req, res) => {
         if ((items.wateringCans ?? 0) <= 0) return res.status(400).json({ error: "Нет леек в инвентаре" });
         const plot = plots.find((p) => p.id === targetPlotId);
         if (!plot || plot.status !== "growing") return res.status(400).json({ error: "Грядка не растёт" });
-        const cfg = ITEM_CONFIG.watering_can;
-        plots = plots.map((p) => p.id === targetPlotId ? applyWateringEffect(p, cfg.growthReduction, cfg.doubleHarvestChance) : p);
+        const wcTier = toolTiers.watering_can ?? 0;
+        const wcTierDef = TOOL_TIER_CONFIG.watering_can[wcTier];
+        // Gold tier (tier 2): water 3 adjacent plots instead of 1
+        if (wcTier === 2 && wcTierDef.plotsAffected && wcTierDef.plotsAffected >= 3) {
+          const affected3 = getSprinklerAffected(targetPlotId, plots).slice(0, 3);
+          plots = plots.map((p) => affected3.includes(p.id) ? applyWateringEffect(p, wcTierDef.growthReduction, wcTierDef.doubleChance) : p);
+        } else {
+          plots = plots.map((p) => p.id === targetPlotId ? applyWateringEffect(p, wcTierDef.growthReduction, wcTierDef.doubleChance) : p);
+        }
         items.wateringCans -= 1;
 
       } else if (itemType === "sprinkler") {
         if ((items.sprinklers ?? 0) <= 0) return res.status(400).json({ error: "Нет спринклеров в инвентаре" });
-        const cfg = ITEM_CONFIG.sprinkler;
+        const spTier = toolTiers.sprinkler ?? 0;
+        const spTierDef = TOOL_TIER_CONFIG.sprinkler[spTier];
+        const spDuration = spTierDef.durationMs ?? ITEM_CONFIG.sprinkler.durationMs;
         const affectedIds = getSprinklerAffected(targetPlotId, plots);
         plots = plots.map((p) =>
-          affectedIds.includes(p.id) ? applyWateringEffect(p, cfg.growthReduction, cfg.doubleHarvestChance) : p
+          affectedIds.includes(p.id) ? applyWateringEffect(p, spTierDef.growthReduction, spTierDef.doubleChance) : p
         );
         const now = new Date();
         const newSprinkler: ActiveSprinkler = {
@@ -1732,7 +1880,7 @@ router.post("/:telegramId/action", async (req, res) => {
           centerPlotId: targetPlotId,
           affectedPlotIds: affectedIds,
           placedAt: now.toISOString(),
-          expiresAt: new Date(now.getTime() + cfg.durationMs).toISOString(),
+          expiresAt: new Date(now.getTime() + spDuration).toISOString(),
         };
         activeSprinklers.push(newSprinkler);
         items.sprinklers -= 1;
@@ -1876,6 +2024,137 @@ router.post("/:telegramId/action", async (req, res) => {
         seeds[shopItem.rewardSeedType as keyof CropInventory] = ((seeds[shopItem.rewardSeedType as keyof CropInventory] as number) ?? 0) + shopItem.rewardSeedQty;
       }
 
+    // ── UPGRADE TOOL ────────────────────────────────────────────────────────────
+    } else if (action === "upgrade_tool") {
+      const { toolType } = req.body as { toolType?: "watering_can" | "sprinkler" };
+      if (!toolType || !TOOL_TIER_CONFIG[toolType]) return res.status(400).json({ error: "Неверный тип инструмента" });
+      const currentTier = toolTiers[toolType] ?? 0;
+      if (currentTier >= 2) return res.status(400).json({ error: "Инструмент уже на максимальном уровне" });
+      const nextTierDef = TOOL_TIER_CONFIG[toolType][currentTier + 1];
+      if (nextTierDef.coinCost > 0 && coins < nextTierDef.coinCost) {
+        return res.status(400).json({ error: `Нужно ${nextTierDef.coinCost} монет для улучшения` });
+      }
+      if (nextTierDef.gemCost > 0 && gems < nextTierDef.gemCost) {
+        return res.status(400).json({ error: `Нужно ${nextTierDef.gemCost} 💎 кристаллов для улучшения` });
+      }
+      coins -= nextTierDef.coinCost;
+      gems -= nextTierDef.gemCost;
+      toolTiers[toolType] = (currentTier + 1) as 0 | 1 | 2;
+
+      // Save toolTiers and redirect response early (toolTiers is saved in the final db.update below)
+      // No early return - falls through to final save
+
+    // ── BUY PREMIUM PASS ────────────────────────────────────────────────────────
+    } else if (action === "buy_premium_pass") {
+      const PREMIUM_PASS_COST_GEMS = 99;
+      if (gems < PREMIUM_PASS_COST_GEMS) return res.status(400).json({ error: `Нужно ${PREMIUM_PASS_COST_GEMS} 💎 кристаллов` });
+
+      const passResult = await db.transaction(async (tx) => {
+        const [existingPass] = await tx
+          .select()
+          .from(farmPassTable)
+          .where(and(eq(farmPassTable.telegramId, telegramId), eq(farmPassTable.passSeasonId, PASS_SEASON_ID)));
+        if (existingPass?.isPremium) return { status: "already_premium" as const };
+
+        if (existingPass) {
+          await tx.update(farmPassTable)
+            .set({ isPremium: true, updatedAt: new Date() })
+            .where(eq(farmPassTable.id, existingPass.id));
+        } else {
+          await tx.insert(farmPassTable).values({
+            telegramId, passSeasonId: PASS_SEASON_ID, xp: 0, level: 1,
+            freeTrackClaimed: [], premiumTrackClaimed: [], isPremium: true,
+          });
+        }
+        await tx.update(farmStateTable)
+          .set({ gems: gems - PREMIUM_PASS_COST_GEMS, updatedAt: new Date() })
+          .where(eq(farmStateTable.telegramId, telegramId));
+        return { status: "ok" as const };
+      });
+
+      if (passResult.status === "already_premium") return res.status(409).json({ error: "Пасс уже активен" });
+      gems -= PREMIUM_PASS_COST_GEMS;
+
+      const passForResp = await getOrCreateFarmPass(telegramId);
+      worlds[activeWorldId] = { ...(worlds[activeWorldId] || { unlocked: true }), plots };
+      const farmOutPass = serializeFarm({ ...farm, plots, coins, gems, xp, level: getLevelFromXp(xp), energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, eventCoins, toolTiers }, telegramId);
+      const playerAchsPass = await getPlayerAchievements(telegramId);
+      return res.json({ ...farmOutPass, farmPass: serializeFarmPass(passForResp), achievements: buildAchievementsResponse(playerAchsPass) });
+
+    // ── CLAIM PASS REWARD ────────────────────────────────────────────────────────
+    } else if (action === "claim_pass_reward") {
+      const { passLevel, track } = req.body as { passLevel?: number; track?: "free" | "premium" };
+      if (!passLevel || !track || !["free", "premium"].includes(track)) {
+        return res.status(400).json({ error: "passLevel и track обязательны" });
+      }
+      if (passLevel < 1 || passLevel > PASS_MAX_LEVEL) return res.status(400).json({ error: "Неверный уровень" });
+
+      const reward = PASS_REWARDS.find((r) => r.level === passLevel);
+      if (!reward) return res.status(400).json({ error: "Награда не найдена" });
+
+      const passClaimResult = await db.transaction(async (tx) => {
+        const [pass] = await tx
+          .select()
+          .from(farmPassTable)
+          .where(and(eq(farmPassTable.telegramId, telegramId), eq(farmPassTable.passSeasonId, PASS_SEASON_ID)));
+
+        if (!pass) return { status: "no_pass" as const };
+        if (pass.level < passLevel) return { status: "not_reached" as const };
+        if (track === "premium" && !pass.isPremium) return { status: "not_premium" as const };
+
+        const claimedArr = track === "free"
+          ? (pass.freeTrackClaimed as number[]) || []
+          : (pass.premiumTrackClaimed as number[]) || [];
+
+        if (claimedArr.includes(passLevel)) return { status: "already_claimed" as const };
+
+        const rewardDef = track === "free" ? reward.free : reward.premium;
+        const newClaimed = [...claimedArr, passLevel];
+
+        const updateSet = track === "free"
+          ? { freeTrackClaimed: newClaimed as number[], updatedAt: new Date() }
+          : { premiumTrackClaimed: newClaimed as number[], updatedAt: new Date() };
+
+        const [updatedPass] = await tx
+          .update(farmPassTable)
+          .set(updateSet)
+          .where(eq(farmPassTable.id, pass.id))
+          .returning();
+
+        return { status: "ok" as const, rewardDef, updatedPass };
+      });
+
+      if (passClaimResult.status === "no_pass") return res.status(400).json({ error: "Пасс не найден" });
+      if (passClaimResult.status === "not_reached") return res.status(400).json({ error: "Уровень ещё не достигнут" });
+      if (passClaimResult.status === "not_premium") return res.status(400).json({ error: "Необходим платный пасс" });
+      if (passClaimResult.status === "already_claimed") return res.status(409).json({ error: "Награда уже получена" });
+
+      const { rewardDef } = passClaimResult;
+      if (rewardDef.type === "coins" && rewardDef.amount) coins += rewardDef.amount;
+      if (rewardDef.type === "gems" && rewardDef.amount) gems += rewardDef.amount;
+      if (rewardDef.type === "seeds" && rewardDef.seedType && rewardDef.seedQty) {
+        seeds[rewardDef.seedType as keyof CropInventory] = ((seeds[rewardDef.seedType as keyof CropInventory] as number) ?? 0) + rewardDef.seedQty;
+      }
+      if (rewardDef.type === "pet") {
+        // Unicorn pet reward — grant gems as bonus
+        gems += 20;
+      }
+
+      worlds[activeWorldId] = { ...(worlds[activeWorldId] || { unlocked: true }), plots };
+      const level = getLevelFromXp(xp);
+      if (level > farm.level) maxEnergy = Math.min(60, 30 + level * 2);
+      await db.update(farmStateTable).set({
+        plots, coins, gems, xp, level, energy, maxEnergy,
+        animals, buildings, products, inventory, seeds,
+        quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, eventCoins, toolTiers,
+        updatedAt: new Date(),
+      }).where(eq(farmStateTable.telegramId, telegramId));
+
+      const updatedPass = await getOrCreateFarmPass(telegramId);
+      const farmOutClaim = serializeFarm({ ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, eventCoins, toolTiers }, telegramId);
+      const playerAchsClaim = await getPlayerAchievements(telegramId);
+      return res.json({ ...farmOutClaim, farmPass: serializeFarmPass(updatedPass), achievements: buildAchievementsResponse(playerAchsClaim) });
+
     // ── OPEN CASE ───────────────────────────────────────────────────────────────
     } else if (action === "open_case") {
       const { caseId } = req.body;
@@ -1940,12 +2219,13 @@ router.post("/:telegramId/action", async (req, res) => {
         plots, coins, gems, xp, level, energy, maxEnergy,
         animals, buildings, products, inventory, seeds,
         quests, npcOrders, items, activeSprinklers,
-        worlds, activeWorldId,
+        worlds, activeWorldId, toolTiers,
         updatedAt: new Date(),
       }).where(eq(farmStateTable.telegramId, telegramId));
-      const farmOut = serializeFarm({ ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId }, telegramId);
+      const farmOut = serializeFarm({ ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, toolTiers }, telegramId);
       const playerAchsCase = await getPlayerAchievements(telegramId);
-      return res.json({ ...farmOut, caseResult, achievements: buildAchievementsResponse(playerAchsCase) });
+      const farmPassCase = await getOrCreateFarmPass(telegramId);
+      return res.json({ ...farmOut, caseResult, farmPass: serializeFarmPass(farmPassCase), achievements: buildAchievementsResponse(playerAchsCase) });
 
     } else {
       return res.status(400).json({ error: "Неизвестное действие" });
@@ -1966,16 +2246,21 @@ router.post("/:telegramId/action", async (req, res) => {
       quests, npcOrders, items, activeSprinklers,
       worlds, activeWorldId,
       eventCoins,
+      toolTiers,
       weatherType: currentWeather,
       weatherUpdatedAt: new Date(),
       updatedAt: new Date(),
     }).where(eq(farmStateTable.telegramId, telegramId));
 
+    // Add Farm Pass XP for key actions
+    await addPassXp(telegramId, action);
+
     // Update level achievement after any action
     await setAchievementAbsolute(telegramId, "level_up", level);
 
     const playerAchs = await getPlayerAchievements(telegramId);
-    res.json({ ...serializeFarm({ ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, eventCoins }, telegramId), achievements: buildAchievementsResponse(playerAchs) });
+    const farmPass = await getOrCreateFarmPass(telegramId);
+    res.json({ ...serializeFarm({ ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, eventCoins, toolTiers }, telegramId), farmPass: serializeFarmPass(farmPass), achievements: buildAchievementsResponse(playerAchs) });
   } catch (err) {
     console.error("performFarmAction error:", err);
     res.status(500).json({ error: "Internal server error" });
@@ -2069,6 +2354,8 @@ function serializeFarm(farm: any, telegramId: string) {
     weatherGrowMult: WEATHER_GROW_MULT[weather],
     activeEvent: event?.isActive ? event : null,
     fishInventory: (farm.fishInventory as Record<string, number>) ?? {},
+    toolTiers: (farm.toolTiers as ToolTiers) || emptyToolTiers(),
+    toolTierConfig: TOOL_TIER_CONFIG,
     updatedAt: farm.updatedAt instanceof Date ? farm.updatedAt.toISOString() : farm.updatedAt,
   };
 }

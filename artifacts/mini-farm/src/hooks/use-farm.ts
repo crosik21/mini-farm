@@ -102,6 +102,15 @@ export function useFarmAction() {
       } else if (variables.action === "claim_achievement") {
         hapticFeedback("success");
         toast({ title: "Достижение засчитано! 🏆" });
+      } else if (variables.action === "upgrade_tool") {
+        hapticFeedback("success");
+        toast({ title: "Инструмент улучшен! ⬆️" });
+      } else if (variables.action === "buy_premium_pass") {
+        hapticFeedback("success");
+        toast({ title: "Пасс активирован! 🏆", description: "Теперь доступны эксклюзивные награды!" });
+      } else if (variables.action === "claim_pass_reward") {
+        hapticFeedback("success");
+        toast({ title: "Награда пасса получена! 🎁" });
       }
     },
     onError: (error) => {
@@ -111,7 +120,7 @@ export function useFarmAction() {
   });
 
   const mutate = useCallback(
-    (data: FarmAction, callbacks?: { onSuccess?: () => void }) => {
+    (data: FarmAction, callbacks?: { onSuccess?: () => void; onError?: (error: Error) => void }) => {
       mutation.mutate(data, callbacks);
     },
     [mutation.mutate]

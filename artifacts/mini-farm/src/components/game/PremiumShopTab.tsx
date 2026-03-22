@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useFarmAction } from "@/hooks/use-farm";
-import { FarmData } from "@/lib/types";
-import { Droplets, Wind, ShoppingCart, Info } from "lucide-react";
+import { FarmData, ToolTierDef } from "@/lib/types";
+import { Droplets, Wind, ShoppingCart, Info, ArrowUp, ChevronRight } from "lucide-react";
 
 interface PremiumShopTabProps {
   farm: FarmData;
@@ -38,7 +38,6 @@ function ItemCard({
       layout
       className={`${bgColor} ${borderColor} border-2 rounded-3xl overflow-hidden`}
     >
-      {/* Header */}
       <div className="p-4 pb-3">
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-3">
@@ -56,7 +55,6 @@ function ItemCard({
           </button>
         </div>
 
-        {/* Effects */}
         <AnimatePresence>
           {showInfo && (
             <motion.div
@@ -76,7 +74,6 @@ function ItemCard({
           )}
         </AnimatePresence>
 
-        {/* Count badge */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-muted-foreground">В инвентаре:</span>
@@ -96,7 +93,6 @@ function ItemCard({
         </div>
       </div>
 
-      {/* Buy section */}
       <div className="bg-card/40 border-t border-border/30 px-4 py-3 flex gap-2">
         <motion.button
           onClick={() => onBuy(1)}
@@ -132,9 +128,87 @@ function ItemCard({
   );
 }
 
+const TIER_NAMES = ["Обычный", "Серебряный", "Золотой"];
+const TIER_COLORS = [
+  { bg: "bg-gray-500/10", border: "border-gray-400/30", badge: "bg-gray-400 text-white", accent: "bg-gray-500" },
+  { bg: "bg-slate-400/10", border: "border-slate-400/40", badge: "bg-slate-400 text-white", accent: "bg-slate-500" },
+  { bg: "bg-amber-400/10", border: "border-amber-400/40", badge: "bg-amber-400 text-black", accent: "bg-amber-500" },
+];
+
+interface ToolUpgradeCardProps {
+  toolType: "watering_can" | "sprinkler";
+  currentTier: 0 | 1 | 2;
+  tiers: ToolTierDef[];
+  coins: number;
+  gems: number;
+  isPending: boolean;
+  onUpgrade: () => void;
+  onConfirm: (toolType: "watering_can" | "sprinkler", nextTier: ToolTierDef) => void;
+}
+
+function ToolUpgradeCard({ toolType, currentTier, tiers, coins, gems, isPending, onConfirm }: ToolUpgradeCardProps) {
+  const tierColors = TIER_COLORS[currentTier];
+  const currentDef = tiers[currentTier];
+  const nextDef = currentTier < 2 ? tiers[currentTier + 1] : null;
+  const isMaxed = currentTier === 2;
+
+  const canAfford = nextDef
+    ? (nextDef.coinCost === 0 || coins >= nextDef.coinCost) && (nextDef.gemCost === 0 || gems >= nextDef.gemCost)
+    : false;
+
+  return (
+    <motion.div layout className={`${tierColors.bg} ${tierColors.border} border-2 rounded-3xl overflow-hidden`}>
+      <div className="p-4">
+        <div className="flex items-center gap-3 mb-3">
+          <div className={`w-12 h-12 ${tierColors.accent} rounded-2xl flex items-center justify-center text-2xl shadow-md`}>
+            {currentDef.emoji}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-0.5">
+              <h3 className="font-black text-sm text-foreground truncate">{currentDef.name}</h3>
+              <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${tierColors.badge}`}>
+                {TIER_NAMES[currentTier]}
+              </span>
+            </div>
+            <p className="text-[10px] text-muted-foreground leading-tight">{currentDef.bonusDesc}</p>
+          </div>
+        </div>
+
+        {!isMaxed && nextDef ? (
+          <>
+            <div className="bg-card/50 rounded-xl p-2.5 mb-3 border border-border/30">
+              <div className="text-[10px] text-muted-foreground font-bold mb-1">Следующий уровень: {nextDef.name}</div>
+              <div className="text-[10px] text-foreground/80">{nextDef.bonusDesc}</div>
+            </div>
+            <motion.button
+              onClick={() => onConfirm(toolType, nextDef)}
+              disabled={isPending || !canAfford}
+              whileTap={{ scale: 0.93 }}
+              className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl font-black text-sm transition-all
+                ${canAfford
+                  ? "bg-green-500 text-white shadow-md active:opacity-80"
+                  : "bg-muted text-muted-foreground opacity-50 cursor-not-allowed"}`}
+            >
+              <ArrowUp size={14} />
+              <span>Улучшить</span>
+              {nextDef.coinCost > 0 && <span>🪙{nextDef.coinCost}</span>}
+              {nextDef.gemCost > 0 && <span>💎{nextDef.gemCost}</span>}
+            </motion.button>
+          </>
+        ) : (
+          <div className="text-center py-2 text-xs font-black text-amber-500">
+            ✨ Максимальный уровень!
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
 export function PremiumShopTab({ farm, onActivateItem }: PremiumShopTabProps) {
   const { mutate: performAction, isPending } = useFarmAction();
   const [feedback, setFeedback] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [confirmUpgrade, setConfirmUpgrade] = useState<{ toolType: "watering_can" | "sprinkler"; nextTier: ToolTierDef } | null>(null);
 
   const handleBuy = (itemType: "watering_can" | "sprinkler", quantity: number) => {
     performAction(
@@ -152,15 +226,37 @@ export function PremiumShopTab({ farm, onActivateItem }: PremiumShopTabProps) {
     );
   };
 
+  const handleUpgrade = (toolType: "watering_can" | "sprinkler") => {
+    performAction(
+      { action: "upgrade_tool", toolType },
+      {
+        onSuccess: () => {
+          setConfirmUpgrade(null);
+          setFeedback({ msg: "Инструмент улучшен! ✓", ok: true });
+          setTimeout(() => setFeedback(null), 2000);
+        },
+        onError: (e: any) => {
+          setConfirmUpgrade(null);
+          setFeedback({ msg: e?.message || "Ошибка", ok: false });
+          setTimeout(() => setFeedback(null), 2500);
+        },
+      }
+    );
+  };
+
+  const toolTiers = farm.toolTiers ?? { watering_can: 0, sprinkler: 0 };
+  const toolTierConfig = farm.toolTierConfig ?? {
+    watering_can: [],
+    sprinkler: [],
+  };
+
   return (
     <div className="p-4 pb-8 flex flex-col gap-4">
-      {/* Header hint */}
       <div className="bg-purple-500/10 border border-purple-500/25 rounded-2xl px-4 py-3 text-sm text-foreground/80 leading-snug">
         <span className="font-bold text-purple-500 dark:text-purple-400">✨ Премиум предметы</span> покупаются за 💎 кристаллы.
         Используй их прямо с поля — выбери предмет и нажми на грядку.
       </div>
 
-      {/* Feedback toast */}
       <AnimatePresence>
         {feedback && (
           <motion.div
@@ -169,6 +265,51 @@ export function PremiumShopTab({ farm, onActivateItem }: PremiumShopTabProps) {
               ${feedback.ok ? "bg-green-500/15 text-green-600 dark:text-green-400" : "bg-red-500/15 text-red-500"}`}
           >
             {feedback.msg}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Confirmation dialog */}
+      <AnimatePresence>
+        {confirmUpgrade && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center p-4"
+            onClick={() => setConfirmUpgrade(null)}
+          >
+            <motion.div
+              initial={{ y: 100 }} animate={{ y: 0 }} exit={{ y: 100 }}
+              className="bg-card border border-border rounded-3xl p-6 w-full max-w-sm"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="font-black text-lg text-foreground mb-2">Улучшить инструмент?</h3>
+              <p className="text-sm text-muted-foreground mb-1">{confirmUpgrade.nextTier.name}</p>
+              <p className="text-xs text-foreground/70 mb-4">{confirmUpgrade.nextTier.bonusDesc}</p>
+              <div className="flex items-center gap-2 mb-6 text-sm font-bold">
+                {confirmUpgrade.nextTier.coinCost > 0 && (
+                  <span className="bg-amber-500/15 text-amber-600 px-3 py-1 rounded-full">🪙 {confirmUpgrade.nextTier.coinCost} монет</span>
+                )}
+                {confirmUpgrade.nextTier.gemCost > 0 && (
+                  <span className="bg-purple-500/15 text-purple-600 px-3 py-1 rounded-full">💎 {confirmUpgrade.nextTier.gemCost} кристаллов</span>
+                )}
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setConfirmUpgrade(null)}
+                  className="flex-1 py-3 rounded-2xl bg-muted text-muted-foreground font-bold text-sm"
+                >
+                  Отмена
+                </button>
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => handleUpgrade(confirmUpgrade.toolType)}
+                  disabled={isPending}
+                  className="flex-1 py-3 rounded-2xl bg-green-500 text-white font-black text-sm shadow-md"
+                >
+                  Улучшить
+                </motion.button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -220,6 +361,43 @@ export function PremiumShopTab({ farm, onActivateItem }: PremiumShopTabProps) {
         gems={farm.gems}
       />
 
+      {/* Tool Upgrades Section */}
+      {toolTierConfig.watering_can.length > 0 && (
+        <>
+          <div className="flex items-center gap-2 mt-2">
+            <div className="flex-1 h-px bg-border/50" />
+            <p className="text-xs font-black text-muted-foreground uppercase tracking-widest">Прокачка инструментов</p>
+            <div className="flex-1 h-px bg-border/50" />
+          </div>
+
+          <div className="bg-amber-500/8 border border-amber-400/20 rounded-2xl px-3 py-2.5 text-xs text-foreground/70 leading-snug">
+            <span className="font-bold text-amber-500">⬆️ Улучшай</span> инструменты, чтобы ускорить рост, увеличить шанс двойного урожая и разблокировать новые способности.
+          </div>
+
+          <ToolUpgradeCard
+            toolType="watering_can"
+            currentTier={toolTiers.watering_can ?? 0}
+            tiers={toolTierConfig.watering_can}
+            coins={farm.coins}
+            gems={farm.gems}
+            isPending={isPending}
+            onUpgrade={() => {}}
+            onConfirm={(toolType, nextTier) => setConfirmUpgrade({ toolType, nextTier })}
+          />
+
+          <ToolUpgradeCard
+            toolType="sprinkler"
+            currentTier={toolTiers.sprinkler ?? 0}
+            tiers={toolTierConfig.sprinkler}
+            coins={farm.coins}
+            gems={farm.gems}
+            isPending={isPending}
+            onUpgrade={() => {}}
+            onConfirm={(toolType, nextTier) => setConfirmUpgrade({ toolType, nextTier })}
+          />
+        </>
+      )}
+
       {/* Active sprinklers */}
       {(farm.activeSprinklers?.length ?? 0) > 0 && (
         <div>
@@ -247,7 +425,6 @@ export function PremiumShopTab({ farm, onActivateItem }: PremiumShopTabProps) {
         </div>
       )}
 
-      {/* Gem balance */}
       <div className="text-center text-xs text-muted-foreground pt-2">
         Твой баланс: <span className="font-black text-purple-500">💎 {farm.gems}</span> кристаллов
       </div>

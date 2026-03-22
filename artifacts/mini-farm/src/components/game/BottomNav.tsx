@@ -1,8 +1,8 @@
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { Home, ShoppingBag, User, Shield, Users, Package, Fish, Store, Gift } from "lucide-react";
+import { Home, ShoppingBag, User, Shield, Users, Package, Fish, Store, Gift, Trophy } from "lucide-react";
 
-export type Tab = "farm" | "shop" | "fishing" | "marketplace" | "friends" | "cases" | "profile" | "admin";
+export type Tab = "farm" | "shop" | "fishing" | "marketplace" | "friends" | "cases" | "pass" | "profile" | "admin";
 
 const ADMIN_TELEGRAM_ID = "1335699132";
 
@@ -56,6 +56,11 @@ export function BottomNav({ activeTab, onTabChange, shopBadge, profileBadge, tel
       id: "cases",
       label: "Кейсы",
       icon: (active) => <Gift size={20} strokeWidth={active ? 2.5 : 1.7} />,
+    },
+    {
+      id: "pass",
+      label: "Пасс",
+      icon: (active) => <Trophy size={20} strokeWidth={active ? 2.5 : 1.7} />,
     },
     {
       id: "friends",

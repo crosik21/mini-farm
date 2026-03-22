@@ -36,6 +36,7 @@ export const farmStateTable = pgTable("farm_states", {
   weatherType: text("weather_type").notNull().default("sunny"),
   weatherUpdatedAt: timestamp("weather_updated_at").notNull().defaultNow(),
   fishInventory: jsonb("fish_inventory").$type<Record<string, number>>(),
+  toolTiers: jsonb("tool_tiers").$type<ToolTiers>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -71,6 +72,11 @@ export type WorldsData = {
 export type ItemInventory = {
   wateringCans: number;
   sprinklers: number;
+};
+
+export type ToolTiers = {
+  watering_can: 0 | 1 | 2;
+  sprinkler: 0 | 1 | 2;
 };
 
 export type ActiveSprinkler = {
@@ -298,3 +304,30 @@ export const marketListingsTable = pgTable("market_listings", {
 });
 
 export type MarketListing = typeof marketListingsTable.$inferSelect;
+
+// ─────────────────────── Farm Pass ────────────────────────────────────────────
+
+export type PassReward = {
+  type: "coins" | "gems" | "seeds" | "pet";
+  amount?: number;
+  seedType?: string;
+  seedQty?: number;
+  petType?: string;
+};
+
+export const farmPassTable = pgTable("farm_pass", {
+  id: serial("id").primaryKey(),
+  telegramId: text("telegram_id").notNull(),
+  passSeasonId: text("pass_season_id").notNull(),
+  xp: integer("xp").notNull().default(0),
+  level: integer("level").notNull().default(1),
+  freeTrackClaimed: jsonb("free_track_claimed").notNull().$type<number[]>().default([]),
+  premiumTrackClaimed: jsonb("premium_track_claimed").notNull().$type<number[]>().default([]),
+  isPremium: boolean("is_premium").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  uniquePass: uniqueIndex("farm_pass_telegram_season_unique").on(table.telegramId, table.passSeasonId),
+}));
+
+export type FarmPass = typeof farmPassTable.$inferSelect;

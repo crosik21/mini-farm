@@ -354,3 +354,218 @@ export const SKINS: SkinDef[] = [
   { id: "night",    name: "Ночная ферма",    emoji: "🌙", description: "Звёздное небо над тихим полем",     bg1: "#2d3a5c", bg2: "#1a2040", priceGem: 60 },
   { id: "golden",   name: "Золотая ферма",   emoji: "✨", description: "Легендарный золотой облик",          bg1: "#fff0a0", bg2: "#f59e0b", priceGem: 100 },
 ];
+
+// ─── Pets ─────────────────────────────────────────────────────────────────────
+
+export type PetBonusType = "harvest_coins" | "harvest_xp" | "grow_speed" | "fish_coins" | "energy_regen" | "gem_daily";
+
+export interface PetDef {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  bonusType: PetBonusType;
+  bonusValue: number;
+  bonusLabel: string;
+  priceCoin?: number;
+  priceGem?: number;
+  source?: "pass" | "shop";
+}
+
+export const PET_DEFS: PetDef[] = [
+  {
+    id: "cat",
+    name: "Кот",
+    emoji: "🐱",
+    description: "Бдительный хранитель фермы, приносит удачу с деньгами.",
+    bonusType: "harvest_coins",
+    bonusValue: 0.12,
+    bonusLabel: "+12% монет с урожая",
+    priceCoin: 1500,
+  },
+  {
+    id: "dog",
+    name: "Пёс",
+    emoji: "🐶",
+    description: "Верный друг, помогает восполнять силы быстрее.",
+    bonusType: "energy_regen",
+    bonusValue: 0.25,
+    bonusLabel: "+25% скорость восстановления энергии",
+    priceCoin: 1200,
+  },
+  {
+    id: "bee",
+    name: "Пчела",
+    emoji: "🐝",
+    description: "Трудолюбивая пчела — больше опыта за каждый урожай.",
+    bonusType: "harvest_xp",
+    bonusValue: 0.20,
+    bonusLabel: "+20% опыта с урожая",
+    priceCoin: 2000,
+  },
+  {
+    id: "rabbit",
+    name: "Кролик",
+    emoji: "🐰",
+    description: "Шустрый помощник — культуры растут быстрее.",
+    bonusType: "grow_speed",
+    bonusValue: 0.10,
+    bonusLabel: "-10% время роста",
+    priceGem: 35,
+  },
+  {
+    id: "fox",
+    name: "Лиса",
+    emoji: "🦊",
+    description: "Ловкая лиса увеличивает выручку от продажи рыбы.",
+    bonusType: "fish_coins",
+    bonusValue: 0.25,
+    bonusLabel: "+25% монет от рыбалки",
+    priceGem: 45,
+  },
+  {
+    id: "owl",
+    name: "Сова",
+    emoji: "🦉",
+    description: "Мудрая сова увеличивает опыт от любых действий.",
+    bonusType: "harvest_xp",
+    bonusValue: 0.15,
+    bonusLabel: "+15% опыта со всех действий",
+    priceGem: 60,
+  },
+  {
+    id: "unicorn",
+    name: "Единорог",
+    emoji: "🦄",
+    description: "Легендарный питомец — каждый день приносит 5 кристаллов.",
+    bonusType: "gem_daily",
+    bonusValue: 5,
+    bonusLabel: "+5 кристаллов каждый вход",
+    source: "pass",
+  },
+];
+
+// ─── Skill Tree ───────────────────────────────────────────────────────────────
+
+export interface SkillNode {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  bonusLabel: string;
+  cost: number;
+  prereq: string | null;
+  branch: "farm" | "trade" | "fishing";
+  row: number;
+}
+
+export const SKILL_NODES: SkillNode[] = [
+  // ── Farm branch ──────────────────────────────────────────────
+  {
+    id: "grow_1",
+    name: "Быстрый рост I",
+    emoji: "⚡",
+    description: "Культуры созревают чуть быстрее.",
+    bonusLabel: "-10% время роста",
+    cost: 1,
+    prereq: null,
+    branch: "farm",
+    row: 0,
+  },
+  {
+    id: "grow_2",
+    name: "Быстрый рост II",
+    emoji: "⚡⚡",
+    description: "Ещё быстрее! Суммируется с первым уровнем.",
+    bonusLabel: "-20% время роста",
+    cost: 2,
+    prereq: "grow_1",
+    branch: "farm",
+    row: 1,
+  },
+  {
+    id: "master_harvest",
+    name: "Мастер жатвы",
+    emoji: "🌾",
+    description: "Каждый собранный урожай приносит дополнительные монеты.",
+    bonusLabel: "+8 монет за каждый урожай",
+    cost: 3,
+    prereq: "grow_2",
+    branch: "farm",
+    row: 2,
+  },
+  // ── Trade branch ─────────────────────────────────────────────
+  {
+    id: "discount_1",
+    name: "Скидка I",
+    emoji: "🏷️",
+    description: "Цены в магазине семян немного снижаются.",
+    bonusLabel: "-8% цены семян",
+    cost: 1,
+    prereq: null,
+    branch: "trade",
+    row: 0,
+  },
+  {
+    id: "discount_2",
+    name: "Скидка II",
+    emoji: "🏷️🏷️",
+    description: "Дополнительная скидка в магазине.",
+    bonusLabel: "-12% цены семян",
+    cost: 2,
+    prereq: "discount_1",
+    branch: "trade",
+    row: 1,
+  },
+  {
+    id: "rich_harvest",
+    name: "Богатый урожай",
+    emoji: "💰",
+    description: "Продажа урожая приносит на 15% больше монет.",
+    bonusLabel: "+15% монет с урожая",
+    cost: 2,
+    prereq: "discount_2",
+    branch: "trade",
+    row: 2,
+  },
+  // ── Fishing branch ───────────────────────────────────────────
+  {
+    id: "fish_sense",
+    name: "Рыбий нюх",
+    emoji: "🎣",
+    description: "Рыба клюёт чуть чаще — меньше времени ожидания.",
+    bonusLabel: "-15% время ожидания поклёвки",
+    cost: 1,
+    prereq: null,
+    branch: "fishing",
+    row: 0,
+  },
+  {
+    id: "fish_luck",
+    name: "Удача рыбака",
+    emoji: "🍀",
+    description: "Рыба продаётся по более высокой цене.",
+    bonusLabel: "+20% монет от рыбалки",
+    cost: 2,
+    prereq: "fish_sense",
+    branch: "fishing",
+    row: 1,
+  },
+  {
+    id: "master_fishing",
+    name: "Мастер рыбалки",
+    emoji: "🏆",
+    description: "Вершина рыболовного мастерства.",
+    bonusLabel: "+30% монет от рыбалки",
+    cost: 3,
+    prereq: "fish_luck",
+    branch: "fishing",
+    row: 2,
+  },
+];
+
+export const SKILL_BRANCH_META: Record<SkillNode["branch"], { label: string; emoji: string; color: string; bg: string; border: string; text: string }> = {
+  farm:    { label: "Фермер",   emoji: "🌱", color: "green",  bg: "bg-green-50 dark:bg-green-950/30",  border: "border-green-400", text: "text-green-700 dark:text-green-400" },
+  trade:   { label: "Торговец", emoji: "💰", color: "amber",  bg: "bg-amber-50 dark:bg-amber-950/30",  border: "border-amber-400", text: "text-amber-700 dark:text-amber-400" },
+  fishing: { label: "Рыбак",   emoji: "🎣", color: "blue",   bg: "bg-blue-50 dark:bg-blue-950/30",   border: "border-blue-400",  text: "text-blue-700 dark:text-blue-400" },
+};

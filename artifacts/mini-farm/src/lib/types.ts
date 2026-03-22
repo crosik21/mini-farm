@@ -304,6 +304,8 @@ export interface FarmData {
   ownedSkins: string[];
   totalPlaySeconds: number;
   medals: { earned: { id: string; earnedAt: string }[]; equipped: string | null };
+  skillPoints: number;
+  unlockedSkills: string[];
   updatedAt: string;
 }
 
@@ -332,6 +334,7 @@ export type PetEntry = {
 
 export type PetsInventory = {
   owned: PetEntry[];
+  active: string | null;
 };
 
 export type PassReward = {
@@ -398,4 +401,7 @@ export type FarmAction =
   | { action: "buy_skin"; skinId: string }
   | { action: "equip_skin"; skinId: string }
   | { action: "record_playtime"; seconds: number }
-  | { action: "equip_medal"; medalId: string | null };
+  | { action: "equip_medal"; medalId: string | null }
+  | { action: "buy_pet"; petId: string }
+  | { action: "activate_pet"; petId: string | null }
+  | { action: "unlock_skill"; skillId: string };

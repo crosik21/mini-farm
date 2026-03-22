@@ -42,6 +42,8 @@ export const farmStateTable = pgTable("farm_states", {
   ownedSkins: jsonb("owned_skins").$type<string[]>(),
   totalPlaySeconds: integer("total_play_seconds").notNull().default(0),
   medals: jsonb("medals").$type<{ earned: { id: string; earnedAt: string }[]; equipped: string | null }>(),
+  skillPoints: integer("skill_points").notNull().default(0),
+  unlockedSkills: jsonb("unlocked_skills").$type<string[]>(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -92,6 +94,7 @@ export type PetEntry = {
 
 export type PetsInventory = {
   owned: PetEntry[];
+  active: string | null;
 };
 
 export type ActiveSprinkler = {

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Users, BarChart3, Cloud, Search, Edit2, Trash2,
   RefreshCw, Gift, Check, AlertTriangle, X, FileEdit,
-  Plus, Save, ChevronDown, ChevronUp, Sprout, Store, Tag, Package,
+  Plus, Save, ChevronDown, ChevronUp, Sprout, Store, Tag, Package, ChevronRight,
 } from "lucide-react";
 import { CROPS, EXCLUSIVE_CROPS } from "@/lib/constants";
 
@@ -2279,23 +2279,57 @@ const SECTIONS: { id: Section; icon: React.ReactNode; label: string }[] = [
 
 export function AdminTab() {
   const [section, setSection] = useState<Section>("players");
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const active = SECTIONS.find((s) => s.id === section)!;
 
   return (
     <div>
-      <div className="bg-gradient-to-r from-slate-800 to-slate-700 dark:from-slate-900 dark:to-slate-800 px-4 py-3 sticky top-0 z-10">
-        <h1 className="text-white font-bold text-base">🛡️ Админ-панель</h1>
-        <p className="text-slate-400 text-xs">Мини-Ферма</p>
-      </div>
+      <div className="bg-gradient-to-r from-slate-800 to-slate-700 dark:from-slate-900 dark:to-slate-800 px-4 py-3 sticky top-0 z-20">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-white font-bold text-base">🛡️ Админ-панель</h1>
+            <p className="text-slate-400 text-xs">Мини-Ферма</p>
+          </div>
+          {/* Section selector */}
+          <div className="relative">
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white rounded-xl px-3 py-2 text-sm font-semibold transition-colors"
+            >
+              <span className="flex items-center gap-1.5">{active.icon}{active.label}</span>
+              <ChevronDown size={14} className={`transition-transform ${menuOpen ? "rotate-180" : ""}`} />
+            </button>
 
-      <div className="flex bg-card border-b-2 border-border sticky top-[52px] z-10">
-        {SECTIONS.map((s) => (
-          <button key={s.id} onClick={() => setSection(s.id)}
-            className={`flex-1 flex flex-col items-center gap-1 py-2 text-[11px] font-bold transition-all relative ${
-              section === s.id ? "text-foreground" : "text-muted-foreground"}`}>
-            {section === s.id && <span className="absolute top-0 left-1/4 right-1/4 h-0.5 bg-primary rounded-b-full" />}
-            {s.icon}{s.label}
-          </button>
-        ))}
+            <AnimatePresence>
+              {menuOpen && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                  transition={{ duration: 0.12 }}
+                  className="absolute right-0 top-full mt-1.5 w-44 bg-popover border border-border rounded-xl shadow-xl overflow-hidden z-50"
+                >
+                  {SECTIONS.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => { setSection(s.id); setMenuOpen(false); }}
+                      className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm font-medium transition-colors ${
+                        s.id === section
+                          ? "bg-primary/10 text-primary"
+                          : "text-foreground hover:bg-muted"
+                      }`}
+                    >
+                      <span className="opacity-70">{s.icon}</span>
+                      {s.label}
+                      {s.id === section && <ChevronRight size={13} className="ml-auto text-primary" />}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
       </div>
 
       <AnimatePresence mode="wait">

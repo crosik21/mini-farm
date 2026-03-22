@@ -233,6 +233,10 @@ router.post("/listings", async (req, res) => {
   const me = getTelegramId(req);
   if (!me) return res.status(401).json({ error: "No telegram id" });
 
+  // Expire stale listings before counting active ones (prevents stale expired rows
+  // from blocking new listings due to MAX_ACTIVE_LISTINGS check)
+  await expireOldListings();
+
   const { itemType, itemId, quantity, pricePerUnit } = req.body as {
     itemType: string;
     itemId: string;
@@ -298,6 +302,9 @@ router.post("/listings", async (req, res) => {
 router.post("/listings/:id/buy", async (req, res) => {
   const me = getTelegramId(req);
   if (!me) return res.status(401).json({ error: "No telegram id" });
+
+  // Expire stale listings before buy to ensure clean state
+  await expireOldListings();
 
   const id = parseInt(req.params.id);
   const { quantity } = req.body as { quantity?: number };

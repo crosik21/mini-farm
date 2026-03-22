@@ -1,0 +1,12 @@
+packages:
+  "framer-motion": "For playful, bouncy game UI animations and transitions"
+  "date-fns": "For formatting and calculating growth progress times"
+  "clsx": "Utility for constructing className strings conditionally"
+  "tailwind-merge": "Utility function to efficiently merge Tailwind CSS classes"
+
+images: []
+
+notes:
+  - "The app integrates with Telegram Web App API via window.Telegram.WebApp."
+  - "If Telegram context is missing (running in regular browser), it defaults to telegramId 'demo_user'."
+  - "Crop configurations (cost, time, price) are hardcoded in the frontend for UI display, but the backend is the source of truth for validation."

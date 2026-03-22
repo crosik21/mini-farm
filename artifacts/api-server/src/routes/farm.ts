@@ -1,0 +1,1494 @@
+import { Router, type IRouter } from "express";
+import { db } from "@workspace/db";
+import {
+  farmStateTable,
+  shopPurchasesTable,
+  promocodesTable,
+  promocodeUsesTable,
+  referralsTable,
+  type PlotState,
+  type CropInventory,
+  type AnimalState,
+  type BuildingState,
+  type ProductInventory,
+  type QuestState,
+  type NpcOrder,
+  type Season,
+  type ItemInventory,
+  type ActiveSprinkler,
+  type WorldId,
+  type WorldsData,
+} from "@workspace/db";
+import { eq, and, inArray, sql } from "drizzle-orm";
+import { getAdminConfig, DEFAULT_SHOP_GLOBAL } from "../admin-config";
+
+const router: IRouter = Router();
+
+// ─────────────────────────────────── Constants ────────────────────────────────
+
+type CropEntry = { growSec: number; seedCost: number; sellPrice: number; xp: number; energyCost: number; unlockLevel: number; world?: WorldId };
+
+const BASE_CROP_CONFIG: Record<string, CropEntry> = {
+  wheat:        { growSec: 30,   seedCost: 5,   sellPrice: 8,   xp: 5,   energyCost: 2, unlockLevel: 1 },
+  carrot:       { growSec: 60,   seedCost: 10,  sellPrice: 16,  xp: 10,  energyCost: 2, unlockLevel: 1 },
+  tomato:       { growSec: 120,  seedCost: 20,  sellPrice: 35,  xp: 15,  energyCost: 2, unlockLevel: 2 },
+  corn:         { growSec: 300,  seedCost: 35,  sellPrice: 80,  xp: 25,  energyCost: 3, unlockLevel: 3 },
+  strawberry:   { growSec: 600,  seedCost: 60,  sellPrice: 180, xp: 40,  energyCost: 3, unlockLevel: 4 },
+  sunflower:    { growSec: 900,  seedCost: 80,  sellPrice: 220, xp: 50,  energyCost: 3, unlockLevel: 5 },
+  pumpkin:      { growSec: 1800, seedCost: 150, sellPrice: 500, xp: 80,  energyCost: 4, unlockLevel: 7 },
+  // 🌲 Лесная ферма
+  blueberry:    { growSec: 180,  seedCost: 25,  sellPrice: 65,  xp: 20,  energyCost: 2, unlockLevel: 1, world: "forest" },
+  mushroom:     { growSec: 500,  seedCost: 70,  sellPrice: 185, xp: 45,  energyCost: 3, unlockLevel: 1, world: "forest" },
+  // 🏜️ Пустыня
+  cactus_fruit: { growSec: 1200, seedCost: 110, sellPrice: 330, xp: 60,  energyCost: 3, unlockLevel: 1, world: "desert" },
+  dates:        { growSec: 2400, seedCost: 190, sellPrice: 680, xp: 100, energyCost: 4, unlockLevel: 1, world: "desert" },
+  // ❄️ Снежная ферма
+  cranberry:    { growSec: 400,  seedCost: 45,  sellPrice: 115, xp: 35,  energyCost: 2, unlockLevel: 1, world: "snow" },
+  ice_root:     { growSec: 800,  seedCost: 110, sellPrice: 285, xp: 75,  energyCost: 3, unlockLevel: 1, world: "snow" },
+  // 🎁 Эксклюзивные (только из кейсов, сажаются на главной ферме)
+  rainbow_corn: { growSec: 600,  seedCost: 0, sellPrice: 290,  xp: 48,  energyCost: 3, unlockLevel: 1 },
+  lucky_clover: { growSec: 900,  seedCost: 0, sellPrice: 350,  xp: 55,  energyCost: 3, unlockLevel: 1 },
+  moonberry:    { growSec: 2400, seedCost: 0, sellPrice: 700,  xp: 80,  energyCost: 3, unlockLevel: 1 },
+  starfruit:    { growSec: 3600, seedCost: 0, sellPrice: 900,  xp: 100, energyCost: 4, unlockLevel: 1 },
+  dragon_fruit: { growSec: 7200, seedCost: 0, sellPrice: 2000, xp: 200, energyCost: 4, unlockLevel: 1 },
+};
+
+// ── Gem case config (mirrors frontend constants) ──────────────────────────────
+type CaseRarity = "rare" | "epic" | "legendary";
+const CASE_RARITY_CROPS: Record<CaseRarity, string[]> = {
+  rare:      ["rainbow_corn", "lucky_clover"],
+  epic:      ["moonberry", "starfruit"],
+  legendary: ["dragon_fruit"],
+};
+const GEM_CASES: Record<string, { gemCost: number; weights: { rarity: CaseRarity; chance: number }[]; minSeeds: number; maxSeeds: number }> = {
+  green_case:  { gemCost: 25,  minSeeds: 2, maxSeeds: 4, weights: [{ rarity: "rare", chance: 0.70 }, { rarity: "epic", chance: 0.25 }, { rarity: "legendary", chance: 0.05 }] },
+  blue_case:   { gemCost: 55,  minSeeds: 3, maxSeeds: 5, weights: [{ rarity: "rare", chance: 0.20 }, { rarity: "epic", chance: 0.60 }, { rarity: "legendary", chance: 0.20 }] },
+  golden_case: { gemCost: 110, minSeeds: 5, maxSeeds: 8, weights: [{ rarity: "rare", chance: 0.00 }, { rarity: "epic", chance: 0.35 }, { rarity: "legendary", chance: 0.65 }] },
+};
+
+function getActiveCropConfig(): Record<string, CropEntry> {
+  const cfg = getAdminConfig();
+  const overrides = cfg.cropOverrides ?? {};
+  const customCrops = cfg.customCrops ?? {};
+  // Merge: base + custom definitions, then apply overrides on top
+  const merged: Record<string, CropEntry> = { ...BASE_CROP_CONFIG };
+  for (const [id, c] of Object.entries(customCrops)) {
+    merged[id] = { growSec: c.growSec, seedCost: c.seedCost, sellPrice: c.sellPrice, xp: c.xp, energyCost: c.energyCost, unlockLevel: c.unlockLevel, world: c.world as WorldId };
+  }
+  return Object.fromEntries(
+    Object.entries(merged).map(([k, v]) => [k, { ...v, ...overrides[k] }])
+  );
+}
+
+function getEffectiveWorldConfig() {
+  const cfg = getAdminConfig();
+  const customCrops = cfg.customCrops ?? {};
+  const effective: typeof WORLD_CONFIG = {
+    main:   { ...WORLD_CONFIG.main,   crops: [...WORLD_CONFIG.main.crops] },
+    forest: { ...WORLD_CONFIG.forest, crops: [...WORLD_CONFIG.forest.crops] },
+    desert: { ...WORLD_CONFIG.desert, crops: [...WORLD_CONFIG.desert.crops] },
+    snow:   { ...WORLD_CONFIG.snow,   crops: [...WORLD_CONFIG.snow.crops] },
+  };
+  for (const [cropId, cropDef] of Object.entries(customCrops)) {
+    const world = cropDef.world as WorldId;
+    if (effective[world] && !effective[world].crops.includes(cropId)) {
+      effective[world].crops.push(cropId);
+    }
+  }
+  return effective;
+}
+
+// Keep backward-compat alias used in serializer (resolved per-request where needed)
+const CROP_CONFIG = BASE_CROP_CONFIG;
+
+const WORLD_CONFIG: Record<WorldId, {
+  name: string; emoji: string; bg1: string; bg2: string;
+  bonus: string | null; bonusDesc: string;
+  crops: string[]; unlockCost: number; growMultiplier: number; xpMultiplier: number; doubleChanceBonus: number;
+}> = {
+  main:   { name: "Главная ферма",  emoji: "🌾", bg1: "#a8e6a3", bg2: "#d4f1c0", bonus: null,         bonusDesc: "Твоя родная ферма",              crops: ["wheat","carrot","tomato","corn","strawberry","sunflower","pumpkin","rainbow_corn","lucky_clover","moonberry","starfruit","dragon_fruit"], unlockCost: 0,    growMultiplier: 1.0, xpMultiplier: 1.0, doubleChanceBonus: 0 },
+  forest: { name: "Лесная ферма",   emoji: "🌲", bg1: "#2d6b3e", bg2: "#4a9e5c", bonus: "fast_growth", bonusDesc: "+50% скорость роста всех культур", crops: ["wheat","carrot","blueberry","mushroom","strawberry"],            unlockCost: 500,  growMultiplier: 0.5, xpMultiplier: 1.0, doubleChanceBonus: 0 },
+  desert: { name: "Пустыня",        emoji: "🏜️", bg1: "#c8853c", bg2: "#f0c060", bonus: "rare_drops",  bonusDesc: "30% шанс двойного урожая",        crops: ["corn","cactus_fruit","dates","sunflower"],                       unlockCost: 500,  growMultiplier: 1.0, xpMultiplier: 1.0, doubleChanceBonus: 0.30 },
+  snow:   { name: "Снежная ферма",  emoji: "❄️", bg1: "#7ab4d4", bg2: "#c8e8f4", bonus: "double_xp",   bonusDesc: "×2 опыт за каждый урожай",        crops: ["wheat","cranberry","ice_root","pumpkin"],                        unlockCost: 500,  growMultiplier: 1.0, xpMultiplier: 2.0, doubleChanceBonus: 0 },
+};
+
+const ANIMAL_CONFIG: Record<string, { cost: number; productType: string; productReadySec: number; xp: number; unlockLevel: number; emoji: string }> = {
+  chicken: { cost: 200,  productType: "egg",  productReadySec: 300,  xp: 20, unlockLevel: 2, emoji: "🐔" },
+  cow:     { cost: 600,  productType: "milk", productReadySec: 600,  xp: 40, unlockLevel: 4, emoji: "🐄" },
+  sheep:   { cost: 400,  productType: "wool", productReadySec: 480,  xp: 30, unlockLevel: 3, emoji: "🐑" },
+  pig:     { cost: 800,  productType: "meat", productReadySec: 720,  xp: 50, unlockLevel: 5, emoji: "🐷" },
+  bee:     { cost: 1200, productType: "honey",productReadySec: 600,  xp: 45, unlockLevel: 7, emoji: "🐝" },
+};
+
+const BUILDING_CONFIG: Record<string, { cost: number; unlockLevel: number; emoji: string; name: string }> = {
+  mill:    { cost: 300,  unlockLevel: 3, emoji: "⚙️", name: "Мельница" },
+  bakery:  { cost: 600,  unlockLevel: 5, emoji: "🍞", name: "Пекарня" },
+  dairy:   { cost: 800,  unlockLevel: 7, emoji: "🧀", name: "Молочный цех" },
+  kitchen: { cost: 900,  unlockLevel: 6, emoji: "🍳", name: "Кухня" },
+};
+
+const RECIPE_CONFIG: Record<string, { building: string; inputs: { itemId: string; quantity: number }[]; outputId: string; outputQty: number; craftSec: number; sellPrice: number; xp: number }> = {
+  // ── Мельница ──────────────────────────────────────────────────────────────
+  flour:       { building: "mill",   inputs: [{ itemId: "wheat",     quantity: 2 }],  outputId: "flour",       outputQty: 1, craftSec: 60,   sellPrice: 20,   xp: 10  },
+  corn_starch: { building: "mill",   inputs: [{ itemId: "corn",      quantity: 2 }],  outputId: "corn_starch", outputQty: 1, craftSec: 90,   sellPrice: 180,  xp: 30  },
+  berry_juice: { building: "mill",   inputs: [{ itemId: "blueberry", quantity: 3 }],  outputId: "berry_juice", outputQty: 1, craftSec: 120,  sellPrice: 160,  xp: 28  },
+  // ── Пекарня ───────────────────────────────────────────────────────────────
+  bread:       { building: "bakery", inputs: [{ itemId: "flour",      quantity: 1 }, { itemId: "egg",         quantity: 1 }],                                          outputId: "bread",       outputQty: 1, craftSec: 120,  sellPrice: 70,   xp: 25  },
+  corn_bread:  { building: "bakery", inputs: [{ itemId: "corn_starch",quantity: 1 }, { itemId: "egg",         quantity: 1 }],                                          outputId: "corn_bread",  outputQty: 1, craftSec: 240,  sellPrice: 380,  xp: 55  },
+  pumpkin_pie: { building: "bakery", inputs: [{ itemId: "pumpkin",    quantity: 1 }, { itemId: "flour",       quantity: 2 }, { itemId: "egg", quantity: 1 }],           outputId: "pumpkin_pie", outputQty: 1, craftSec: 1200, sellPrice: 1100, xp: 120 },
+  // ── Молочный цех ──────────────────────────────────────────────────────────
+  cheese:       { building: "dairy",   inputs: [{ itemId: "milk",       quantity: 2 }],  outputId: "cheese",       outputQty: 1, craftSec: 600,  sellPrice: 90,   xp: 35  },
+  berry_jam:    { building: "dairy",   inputs: [{ itemId: "blueberry",  quantity: 4 }],  outputId: "berry_jam",    outputQty: 1, craftSec: 300,  sellPrice: 200,  xp: 40  },
+  mushroom_soup:{ building: "dairy",   inputs: [{ itemId: "mushroom",   quantity: 2 }, { itemId: "milk",   quantity: 1 }], outputId: "mushroom_soup",outputQty: 1, craftSec: 600,  sellPrice: 420,  xp: 60  },
+  ice_cream:    { building: "dairy",   inputs: [{ itemId: "milk",       quantity: 2 }, { itemId: "ice_root", quantity: 1 }], outputId: "ice_cream",   outputQty: 1, craftSec: 900,  sellPrice: 620,  xp: 80  },
+  honey_yogurt: { building: "dairy",   inputs: [{ itemId: "honey",      quantity: 1 }, { itemId: "milk",   quantity: 1 }], outputId: "honey_yogurt", outputQty: 1, craftSec: 400,  sellPrice: 360,  xp: 55  },
+  // ── Кухня ─────────────────────────────────────────────────────────────────
+  bacon:        { building: "kitchen", inputs: [{ itemId: "meat",       quantity: 1 }],  outputId: "bacon",        outputQty: 1, craftSec: 180,  sellPrice: 220,  xp: 35  },
+  honey_bread:  { building: "kitchen", inputs: [{ itemId: "honey",      quantity: 1 }, { itemId: "flour",  quantity: 1 }], outputId: "honey_bread",  outputQty: 1, craftSec: 300,  sellPrice: 400,  xp: 55  },
+  roast:        { building: "kitchen", inputs: [{ itemId: "meat",       quantity: 1 }, { itemId: "mushroom", quantity: 1 }], outputId: "roast",        outputQty: 1, craftSec: 480,  sellPrice: 600,  xp: 75  },
+};
+
+const PRODUCT_SELL_PRICE: Record<string, number> = {
+  egg: 15, milk: 25, wool: 22, meat: 35, honey: 50,
+  flour: 20, bread: 70, cheese: 90,
+  corn_starch: 180, berry_juice: 160, corn_bread: 380,
+  pumpkin_pie: 1100, berry_jam: 200, mushroom_soup: 420, ice_cream: 620,
+  honey_yogurt: 360, bacon: 220, honey_bread: 400, roast: 600,
+};
+
+const SEASON_GROWTH_MULTIPLIER: Record<Season, number> = {
+  spring: 0.8, summer: 1.0, autumn: 1.0, winter: 1.5,
+};
+
+const SEASON_SELL_MULTIPLIER: Record<Season, number> = {
+  spring: 1.0, summer: 1.0, autumn: 1.2, winter: 1.0,
+};
+
+const SEASON_NAMES: Record<Season, string> = {
+  spring: "🌸 Весна", summer: "☀️ Лето", autumn: "🍂 Осень", winter: "❄️ Зима",
+};
+
+const SEASONS_ORDER: Season[] = ["spring", "summer", "autumn", "winter"];
+const SEASON_DURATION_MS = 2 * 60 * 60 * 1000; // 2 hours per season
+
+const ENERGY_REGEN_INTERVAL_MS = 5 * 60 * 1000; // 1 energy per 5 min
+
+// ─────────────────────────────── Premium Item Config ──────────────────────────
+const ITEM_CONFIG = {
+  watering_can: {
+    name: "Лейка",
+    gemCostSingle: 3,
+    gemCostPack: 7,   // pack of 3
+    packQty: 3,
+    growthReduction: 0.50,  // reduces remaining grow time by 50%
+    doubleHarvestChance: 0.20,
+  },
+  sprinkler: {
+    name: "Спринклер",
+    gemCostSingle: 6,
+    gemCostPack: 10,  // pack of 2
+    packQty: 2,
+    growthReduction: 0.40,  // reduces remaining grow time by 40% per plot
+    doubleHarvestChance: 0.15,
+    durationMs: 5 * 60 * 1000, // 5 minutes active
+  },
+};
+
+function emptyItems(): ItemInventory {
+  return { wateringCans: 0, sprinklers: 0 };
+}
+
+// ─────────────────────────────── Rotating Seed Shop ───────────────────────────
+
+export type ShopRarity = "common" | "rare" | "epic" | "legendary";
+
+export interface ShopSlot {
+  slotIndex: number;
+  cropId: string;
+  rarity: ShopRarity;
+  price: number;
+  stock: number;          // max per player per rotation
+  isSeedOfDay?: boolean;
+  discountPct?: number;
+  outOfStock?: boolean;   // slot exists but not available this rotation
+}
+
+export const SHOP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+export function currentEpoch(): number {
+  const offset = getAdminConfig().shopEpochOffset ?? 0;
+  return Math.floor(Date.now() / SHOP_INTERVAL_MS) + offset;
+}
+
+export function nextRefreshMs(): number {
+  const offset = getAdminConfig().shopEpochOffset ?? 0;
+  const naturalEpoch = Math.floor(Date.now() / SHOP_INTERVAL_MS);
+  return (naturalEpoch + 1) * SHOP_INTERVAL_MS - Date.now();
+}
+
+// Lightweight seeded PRNG (Mulberry32)
+function seededRand(seed: number): () => number {
+  let s = seed >>> 0;
+  return function () {
+    s += 0x6d2b79f5;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+    return ((t ^ (t >>> 14)) >>> 0) / 0x100000000;
+  };
+}
+
+function pick<T>(arr: T[], rng: () => number): T {
+  return arr[Math.floor(rng() * arr.length)];
+}
+
+const BASE_SHOP_POOLS: Record<ShopRarity, string[]> = {
+  common:    ["wheat", "carrot", "tomato"],
+  rare:      ["corn", "blueberry", "cranberry", "mushroom"],
+  epic:      ["sunflower", "strawberry", "cactus_fruit", "ice_root"],
+  legendary: ["pumpkin", "dates"],
+};
+
+const RARITY_PRICE_MULT: Record<ShopRarity, number> = {
+  common:    1.0,
+  rare:      1.2,
+  epic:      1.6,
+  legendary: 2.2,
+};
+
+const RARITY_STOCK: Record<ShopRarity, number> = {
+  common:    10,
+  rare:      5,
+  epic:      2,
+  legendary: 1,
+};
+
+// Default probability that a non-common slot is active (has stock) per rotation
+const DEFAULT_APPEAR_CHANCE: Record<ShopRarity, number> = {
+  common:    1.00,
+  rare:      0.85,
+  epic:      0.70,
+  legendary: 0.55,
+};
+
+function getEffectiveShopPools(): Record<ShopRarity, string[]> {
+  const overrides = getAdminConfig().shopCropOverrides ?? {};
+  const pools: Record<ShopRarity, string[]> = { common: [], rare: [], epic: [], legendary: [] };
+
+  // Start from all known crops (base + custom)
+  const allCrops = Object.keys(getActiveCropConfig());
+
+  for (const cropId of allCrops) {
+    const ov = overrides[cropId];
+    if (ov?.enabled === false) continue; // excluded
+
+    // Determine which pool this crop belongs to
+    let rarity: ShopRarity | null = null;
+    if (ov?.rarity) {
+      rarity = ov.rarity;
+    } else {
+      // Find base pool
+      for (const [r, ids] of Object.entries(BASE_SHOP_POOLS)) {
+        if (ids.includes(cropId)) { rarity = r as ShopRarity; break; }
+      }
+    }
+    if (rarity) pools[rarity].push(cropId);
+  }
+
+  // Fallback: ensure common pool is never empty
+  if (pools.common.length === 0) pools.common = ["wheat", "carrot", "tomato"];
+
+  return pools;
+}
+
+export function generateShopSlots(epoch: number): ShopSlot[] {
+  const cfg = getAdminConfig();
+  const shopOv = cfg.shopCropOverrides ?? {};
+  const gs = { ...DEFAULT_SHOP_GLOBAL, ...(cfg.shopGlobalSettings ?? {}) };
+  const pools = getEffectiveShopPools();
+  const cropCfgs = getActiveCropConfig();
+
+  const rng      = seededRand(epoch * 2654435761);
+  const stockRng = seededRand(epoch * 3141592653);
+  const dayRng   = seededRand(Math.floor(epoch / 12) * 1234567891);
+
+  // Per-rarity price multipliers from global settings
+  const globalPriceMult: Record<ShopRarity, number> = {
+    common:    gs.commonPriceMult,
+    rare:      gs.rarePriceMult,
+    epic:      gs.epicPriceMult,
+    legendary: gs.legPriceMult,
+  };
+
+  // Per-rarity stock from global settings
+  const rarityStock: Record<ShopRarity, number> = {
+    common:    gs.commonStock,
+    rare:      gs.rareStock,
+    epic:      gs.epicStock,
+    legendary: gs.legStock,
+  };
+
+  // Per-rarity default appear chance from global settings
+  const defaultAppearChance: Record<ShopRarity, number> = {
+    common:    1.00,
+    rare:      gs.rareAppearChance,
+    epic:      gs.epicAppearChance,
+    legendary: gs.legAppearChance,
+  };
+
+  const computePrice = (cropId: string, rarity: ShopRarity, discountPct = 0): number => {
+    const ov = shopOv[cropId];
+    if (ov?.shopPrice != null) return Math.max(1, ov.shopPrice);
+    const basePrice = cropCfgs[cropId]?.seedCost ?? 10;
+    const cropMult = ov?.shopPriceMult ?? 1.0;
+    return Math.max(1, Math.round(basePrice * globalPriceMult[rarity] * cropMult * (1 - discountPct / 100)));
+  };
+
+  const isSlotActive = (cropId: string, rarity: ShopRarity): boolean => {
+    if (rarity === "common") return true;
+    const chance = shopOv[cropId]?.appearChance ?? defaultAppearChance[rarity];
+    return stockRng() < chance;
+  };
+
+  // Seed of the Day
+  const sodPool = [...(pools.rare.length ? pools.rare : BASE_SHOP_POOLS.rare),
+                   ...(pools.epic.length ? pools.epic : BASE_SHOP_POOLS.epic)];
+  const sodCrop = pick(sodPool, dayRng);
+  const sodRarity: ShopRarity = (pools.epic.includes(sodCrop) || BASE_SHOP_POOLS.epic.includes(sodCrop)) ? "epic" : "rare";
+  const sodPrice = computePrice(sodCrop, sodRarity, gs.sodDiscount);
+
+  const usedCrops = new Set<string>([sodCrop]);
+
+  function pickUnique(pool: string[], rngFn: () => number): string {
+    const available = pool.filter((c) => !usedCrops.has(c));
+    const src = available.length > 0 ? available : (pool.length > 0 ? pool : BASE_SHOP_POOLS.common);
+    const chosen = pick(src, rngFn);
+    usedCrops.add(chosen);
+    return chosen;
+  }
+
+  const makeSlot = (slotIndex: number, rarity: ShopRarity): ShopSlot => {
+    const pool = pools[rarity].length > 0 ? pools[rarity] : BASE_SHOP_POOLS[rarity];
+    const cropId = pickUnique(pool, rng);
+    const active = isSlotActive(cropId, rarity);
+    return {
+      slotIndex,
+      cropId,
+      rarity,
+      price: computePrice(cropId, rarity),
+      stock: rarityStock[rarity],
+      ...(active ? {} : { outOfStock: true }),
+    };
+  };
+
+  const r3 = rng();
+  const slot3Rarity: ShopRarity = r3 < 0.55 ? "rare" : r3 < 0.85 ? "epic" : "legendary";
+  const r4 = rng();
+  const slot4Rarity: ShopRarity = r4 < 0.45 ? "epic" : r4 < 0.80 ? "legendary" : "rare";
+  const r5 = rng();
+  const slot5Rarity: ShopRarity = r5 < 0.60 ? "epic" : "legendary";
+
+  return [
+    makeSlot(0, "common"),
+    makeSlot(1, "common"),
+    makeSlot(2, "rare"),
+    makeSlot(3, slot3Rarity),
+    makeSlot(4, slot4Rarity),
+    makeSlot(5, slot5Rarity),
+    { slotIndex: 6, cropId: sodCrop, rarity: sodRarity, price: sodPrice, stock: gs.sodStock, isSeedOfDay: true, discountPct: gs.sodDiscount },
+  ];
+}
+
+// GET /seed-shop (query param telegramId passed via header x-telegram-id)
+router.get("/seed-shop", async (req, res) => {
+  try {
+    const telegramId = req.headers["x-telegram-id"] as string;
+    if (!telegramId) return res.status(401).json({ error: "No telegram id" });
+
+    const epoch = currentEpoch();
+    const slots = generateShopSlots(epoch);
+
+    // Fetch how many the player has already bought in this rotation
+    const slotKeys = slots.map((s) => `${epoch}_${s.slotIndex}`);
+    const purchases = await db
+      .select()
+      .from(shopPurchasesTable)
+      .where(
+        and(
+          eq(shopPurchasesTable.telegramId, telegramId),
+          inArray(shopPurchasesTable.slotKey, slotKeys)
+        )
+      );
+
+    const boughtMap: Record<string, number> = {};
+    for (const p of purchases) {
+      boughtMap[p.slotKey] = p.quantity;
+    }
+
+    const slotsWithBought = slots.map((s) => ({
+      ...s,
+      bought: boughtMap[`${epoch}_${s.slotIndex}`] ?? 0,
+    }));
+
+    res.json({
+      epoch,
+      nextRefreshMs: nextRefreshMs(),
+      slots: slotsWithBought,
+    });
+  } catch (err) {
+    console.error("seed-shop error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Gets plus-shape plot IDs centered on centerPlotId
+function getSprinklerAffected(centerPlotId: number, plots: PlotState[]): number[] {
+  const cols = plots.length <= 9 ? 3 : plots.length <= 16 ? 4 : 5;
+  const plotIds = new Set(plots.map((p) => p.id));
+  const row = Math.floor(centerPlotId / cols);
+  const col = centerPlotId % cols;
+  const affected = [centerPlotId];
+  if (col > 0           && plotIds.has(centerPlotId - 1))    affected.push(centerPlotId - 1);
+  if (col < cols - 1    && plotIds.has(centerPlotId + 1))    affected.push(centerPlotId + 1);
+  if (row > 0           && plotIds.has(centerPlotId - cols)) affected.push(centerPlotId - cols);
+  if (plotIds.has(centerPlotId + cols))                      affected.push(centerPlotId + cols);
+  return affected;
+}
+
+function applyWateringEffect(plot: PlotState, reductionFactor: number, doubleChance: number): PlotState {
+  if (plot.status !== "growing" || !plot.readyAt) return plot;
+  const now = Date.now();
+  const readyAt = new Date(plot.readyAt).getTime();
+  const remaining = Math.max(0, readyAt - now);
+  if (remaining <= 0) return plot;
+  const reduction = remaining * reductionFactor;
+  const newReadyAt = new Date(readyAt - reduction).toISOString();
+  const doubleHarvest = Math.random() < doubleChance;
+  return { ...plot, readyAt: newReadyAt, doubleHarvest: doubleHarvest || plot.doubleHarvest };
+}
+const HARVEST_ENERGY = 1;
+const PLANT_ENERGY = 2;
+const FEED_ENERGY = 1;
+
+// ─────────────────────────────── NPC Order Templates ──────────────────────────
+
+const ORDER_ITEMS = ["wheat", "carrot", "tomato", "corn", "egg", "milk", "flour", "bread"];
+
+function generateNpcOrders(level: number): NpcOrder[] {
+  const count = 3;
+  const orders: NpcOrder[] = [];
+  const now = new Date();
+  const npcTemplates = getAdminConfig().npcTemplates;
+  const templates = npcTemplates.length > 0 ? npcTemplates : [{ npcName: "Торговец", npcEmoji: "🧑‍💼" }];
+
+  for (let i = 0; i < count; i++) {
+    const npc = templates[i % templates.length];
+    const itemPool = ORDER_ITEMS.slice(0, Math.min(ORDER_ITEMS.length, 2 + Math.floor(level / 2)));
+    const itemId = itemPool[Math.floor(Math.random() * itemPool.length)];
+    const quantity = 1 + Math.floor(Math.random() * 3);
+    const basePrice = (getActiveCropConfig()[itemId]?.sellPrice || PRODUCT_SELL_PRICE[itemId] || 10);
+    const rewardCoins = Math.floor(basePrice * quantity * 1.5);
+    const rewardXp = Math.floor(rewardCoins / 3);
+
+    orders.push({
+      id: `order_${now.getTime()}_${i}`,
+      npcName: npc.npcName,
+      npcEmoji: npc.npcEmoji,
+      items: [{ itemId, quantity }],
+      reward: { coins: rewardCoins, xp: rewardXp },
+      expiresAt: new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString(),
+      completed: false,
+    });
+  }
+
+  return orders;
+}
+
+// ─────────────────────────────── Quest Templates ──────────────────────────────
+
+const STORY_QUESTS: QuestState[] = [
+  {
+    id: "story_first_harvest",
+    type: "story",
+    title: "Первый урожай",
+    description: "Собери свой первый урожай",
+    goal: { action: "harvest", target: "any", amount: 1 },
+    progress: 0,
+    completed: false,
+    claimed: false,
+    rewardCoins: 50,
+    rewardXp: 30,
+  },
+  {
+    id: "story_first_animal",
+    type: "story",
+    title: "Животновод",
+    description: "Купи своё первое животное",
+    goal: { action: "buy_animal", target: "any", amount: 1 },
+    progress: 0,
+    completed: false,
+    claimed: false,
+    rewardCoins: 100,
+    rewardXp: 50,
+  },
+  {
+    id: "story_first_building",
+    type: "story",
+    title: "Строитель",
+    description: "Построй своё первое здание",
+    goal: { action: "build_building", target: "any", amount: 1 },
+    progress: 0,
+    completed: false,
+    claimed: false,
+    rewardCoins: 150,
+    rewardXp: 80,
+  },
+  {
+    id: "story_first_craft",
+    type: "story",
+    title: "Мастер-крафтер",
+    description: "Скрафти свой первый продукт",
+    goal: { action: "collect_craft", target: "any", amount: 1 },
+    progress: 0,
+    completed: false,
+    claimed: false,
+    rewardCoins: 200,
+    rewardXp: 100,
+    rewardGems: 2,
+  },
+  {
+    id: "story_sell_100",
+    type: "story",
+    title: "Торгаш",
+    description: "Заработай 100 монет от продаж",
+    goal: { action: "sell_any", target: "coins", amount: 100 },
+    progress: 0,
+    completed: false,
+    claimed: false,
+    rewardCoins: 200,
+    rewardXp: 50,
+    rewardGems: 1,
+  },
+];
+
+function generateDailyQuests(): QuestState[] {
+  const today = getTodayDate();
+  const templates = getAdminConfig().dailyQuestTemplates;
+  return templates.map((tpl) => ({
+    id: `${tpl.id}_${today}`,
+    type: "daily" as const,
+    title: tpl.title,
+    description: tpl.description,
+    goal: tpl.goal,
+    progress: 0,
+    completed: false,
+    claimed: false,
+    rewardCoins: tpl.rewardCoins,
+    rewardXp: tpl.rewardXp,
+  }));
+}
+
+function getTodayDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// ─────────────────────────────── Helper Functions ─────────────────────────────
+
+function getLevelFromXp(xp: number): number {
+  const levels = [0, 100, 250, 500, 900, 1500, 2500, 4000, 6000, 10000, 15000];
+  let level = 1;
+  for (let i = 0; i < levels.length; i++) {
+    if (xp >= levels[i]) level = i + 1;
+  }
+  return level;
+}
+
+function getCurrentSeason(seasonUpdatedAt: Date): Season {
+  const elapsed = Date.now() - seasonUpdatedAt.getTime();
+  const idx = Math.floor(elapsed / SEASON_DURATION_MS) % 4;
+  return SEASONS_ORDER[idx];
+}
+
+function regenEnergy(energy: number, maxEnergy: number, lastRegen: Date): { energy: number; lastRegen: Date } {
+  const elapsed = Date.now() - lastRegen.getTime();
+  const intervals = Math.floor(elapsed / ENERGY_REGEN_INTERVAL_MS);
+  if (intervals <= 0) return { energy, lastRegen };
+  const newEnergy = Math.min(maxEnergy, energy + intervals);
+  const newLastRegen = new Date(lastRegen.getTime() + intervals * ENERGY_REGEN_INTERVAL_MS);
+  return { energy: newEnergy, lastRegen: newLastRegen };
+}
+
+function updatePlotStatuses(plots: PlotState[]): PlotState[] {
+  const now = new Date();
+  return plots.map((plot) => {
+    if (plot.status === "growing" && plot.readyAt) {
+      if (now >= new Date(plot.readyAt)) {
+        return { ...plot, status: "ready" };
+      }
+    }
+    return plot;
+  });
+}
+
+function updateAnimalStatuses(animals: AnimalState[]): AnimalState[] {
+  const now = new Date();
+  return animals.map((a) => {
+    if (a.status === "happy" && a.productReadyAt && now >= new Date(a.productReadyAt)) {
+      return { ...a, status: "ready" };
+    }
+    return a;
+  });
+}
+
+function updateCraftStatuses(buildings: BuildingState[]): BuildingState[] {
+  const now = new Date();
+  return buildings.map((b) => {
+    if (b.crafting && now >= new Date(b.crafting.readyAt)) {
+      return b;
+    }
+    return b;
+  });
+}
+
+function updateQuestProgress(quests: QuestState[], action: string, target: string, amount: number): QuestState[] {
+  return quests.map((q) => {
+    if (q.completed) return q;
+    const goalAction = q.goal.action;
+    const goalTarget = q.goal.target;
+
+    let matches = false;
+    if (goalAction === action && (goalTarget === "any" || goalTarget === target)) {
+      matches = true;
+    }
+    if (goalAction === "sell_any" && (action === "sell_crops" || action === "sell_product")) {
+      matches = true;
+    }
+
+    if (!matches) return q;
+
+    const newProgress = Math.min(q.goal.amount, q.progress + amount);
+    const completed = newProgress >= q.goal.amount;
+    return { ...q, progress: newProgress, completed };
+  });
+}
+
+function emptyInventory(): CropInventory {
+  return { wheat: 0, carrot: 0, tomato: 0, corn: 0, strawberry: 0, pumpkin: 0, sunflower: 0, blueberry: 0, mushroom: 0, cactus_fruit: 0, dates: 0, cranberry: 0, ice_root: 0 };
+}
+
+function defaultWorlds(): WorldsData {
+  return {
+    main:   { plots: [], unlocked: true },
+    forest: { plots: Array.from({ length: 9 }, (_, i) => ({ id: i, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null })), unlocked: false },
+    desert: { plots: Array.from({ length: 9 }, (_, i) => ({ id: i, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null })), unlocked: false },
+    snow:   { plots: Array.from({ length: 9 }, (_, i) => ({ id: i, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null })), unlocked: false },
+  };
+}
+
+function emptyProducts(): ProductInventory {
+  return { egg: 0, milk: 0, wool: 0, flour: 0, bread: 0, cheese: 0 };
+}
+
+async function getOrCreateFarm(telegramId: string) {
+  const existing = await db.select().from(farmStateTable).where(eq(farmStateTable.telegramId, telegramId)).limit(1);
+
+  if (existing.length > 0) {
+    const farm = existing[0];
+    const plots = updatePlotStatuses(farm.plots as PlotState[]);
+    const animals = updateAnimalStatuses((farm.animals as AnimalState[]) || []);
+    const buildings = updateCraftStatuses((farm.buildings as BuildingState[]) || []);
+    const season = getCurrentSeason(farm.seasonUpdatedAt instanceof Date ? farm.seasonUpdatedAt : new Date(farm.seasonUpdatedAt));
+    const { energy, lastRegen } = regenEnergy(
+      farm.energy,
+      farm.maxEnergy,
+      farm.lastEnergyRegen instanceof Date ? farm.lastEnergyRegen : new Date(farm.lastEnergyRegen),
+    );
+
+    let quests = (farm.quests as QuestState[]) || [];
+    const today = getTodayDate();
+    if (farm.dailyQuestsDate !== today) {
+      const existingStory = quests.filter((q) => q.type === "story");
+      quests = [...existingStory, ...generateDailyQuests()];
+    }
+
+    let npcOrders = (farm.npcOrders as NpcOrder[]) || [];
+    if (npcOrders.length === 0 || npcOrders.every((o) => o.completed || new Date(o.expiresAt) < new Date())) {
+      npcOrders = generateNpcOrders(farm.level);
+    }
+
+    const rawWorlds = (farm.worlds as WorldsData) || defaultWorlds();
+    const activeWorldId = (farm.activeWorldId as WorldId) || "main";
+    return {
+      ...farm,
+      plots,
+      animals,
+      buildings,
+      season,
+      energy,
+      lastEnergyRegen: lastRegen,
+      quests,
+      npcOrders,
+      products: (farm.products as ProductInventory) || emptyProducts(),
+      inventory: (farm.inventory as CropInventory) || emptyInventory(),
+      seeds: (farm.seeds as CropInventory) || emptyInventory(),
+      worlds: rawWorlds,
+      activeWorldId,
+    };
+  }
+
+  const now = new Date();
+  const initPlots = Array.from({ length: 9 }, (_, i) => ({ id: i, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null }));
+  const initWorlds = defaultWorlds();
+  initWorlds.main = { plots: initPlots, unlocked: true };
+  const newFarm = {
+    telegramId,
+    coins: 150,
+    gems: 5,
+    level: 1,
+    xp: 0,
+    energy: 30,
+    maxEnergy: 30,
+    lastEnergyRegen: now,
+    season: "spring" as Season,
+    seasonUpdatedAt: now,
+    plots: initPlots,
+    inventory: emptyInventory(),
+    seeds: { wheat: 5, carrot: 2, tomato: 1, corn: 0, strawberry: 0, pumpkin: 0, sunflower: 0 } as CropInventory,
+    animals: [] as AnimalState[],
+    buildings: [] as BuildingState[],
+    products: emptyProducts(),
+    quests: [...STORY_QUESTS, ...generateDailyQuests()] as QuestState[],
+    dailyQuestsDate: getTodayDate(),
+    npcOrders: generateNpcOrders(1),
+    worlds: initWorlds,
+    activeWorldId: "main" as WorldId,
+    updatedAt: now,
+  };
+
+  await db.insert(farmStateTable).values(newFarm);
+  return newFarm;
+}
+
+// ─────────────────────────────────── GET Farm State ───────────────────────────
+
+router.get("/:telegramId", async (req, res) => {
+  try {
+    const { telegramId } = req.params;
+    const farm = await getOrCreateFarm(telegramId);
+
+    const cleanedSprinklers = ((farm.activeSprinklers as ActiveSprinkler[]) || [])
+      .filter((s) => new Date(s.expiresAt) > new Date());
+
+    const decodeHeader = (v: string | undefined) => {
+      if (v === undefined) return undefined;
+      try { return decodeURIComponent(v) || null; } catch { return v || null; }
+    };
+    const usernameHeader = decodeHeader(req.headers["x-telegram-username"] as string | undefined);
+    const firstNameHeader = decodeHeader(req.headers["x-telegram-firstname"] as string | undefined);
+    const updatePayload: Record<string, unknown> = {
+      plots: farm.plots,
+      animals: farm.animals,
+      buildings: farm.buildings,
+      energy: farm.energy,
+      lastEnergyRegen: farm.lastEnergyRegen,
+      season: farm.season,
+      quests: farm.quests,
+      dailyQuestsDate: getTodayDate(),
+      npcOrders: farm.npcOrders,
+      items: (farm.items as ItemInventory) || emptyItems(),
+      activeSprinklers: cleanedSprinklers,
+      updatedAt: new Date(),
+    };
+    if (usernameHeader !== undefined) updatePayload.username = usernameHeader || null;
+    if (firstNameHeader !== undefined) updatePayload.firstName = firstNameHeader || null;
+    await db.update(farmStateTable).set(updatePayload).where(eq(farmStateTable.telegramId, telegramId));
+
+    res.json(serializeFarm(farm, telegramId));
+  } catch (err) {
+    console.error("getFarmState error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─────────────────────────────────── POST Action ──────────────────────────────
+
+router.post("/:telegramId/action", async (req, res) => {
+  try {
+    const { telegramId } = req.params;
+    const { action, plotId, cropType, quantity, animalId, buildingId, recipe } = req.body;
+
+    const farm = await getOrCreateFarm(telegramId);
+
+    let plots = farm.plots as PlotState[];
+    let coins = farm.coins;
+    let gems = farm.gems;
+    let xp = farm.xp;
+    let energy = farm.energy;
+    let maxEnergy = farm.maxEnergy;
+    let animals = [...(farm.animals as AnimalState[])];
+    let buildings = [...(farm.buildings as BuildingState[])];
+    let quests = [...(farm.quests as QuestState[])];
+    let npcOrders = [...(farm.npcOrders as NpcOrder[])];
+    const inventory = { ...(farm.inventory as CropInventory) };
+    const seeds = { ...(farm.seeds as CropInventory) };
+    const products = { ...(farm.products as ProductInventory) };
+    const season = farm.season as Season;
+    const items: ItemInventory = { ...(farm.items as ItemInventory || emptyItems()) };
+    let activeSprinklers: ActiveSprinkler[] = [...((farm.activeSprinklers as ActiveSprinkler[]) || [])];
+    // Clean up expired sprinklers
+    activeSprinklers = activeSprinklers.filter((s) => new Date(s.expiresAt) > new Date());
+    let worlds: WorldsData = JSON.parse(JSON.stringify((farm.worlds as WorldsData) || defaultWorlds()));
+    let activeWorldId: WorldId = (farm.activeWorldId as WorldId) || "main";
+    const worldCfg = WORLD_CONFIG[activeWorldId];
+
+    // ── PLANT ──────────────────────────────────────────────────────────────────
+    if (action === "plant") {
+      if (plotId === undefined || !cropType) return res.status(400).json({ error: "plotId и cropType обязательны" });
+      const plot = plots.find((p) => p.id === plotId);
+      if (!plot || plot.status !== "empty") return res.status(400).json({ error: "Грядка не пустая" });
+      if ((seeds[cropType as keyof CropInventory] ?? 0) <= 0) return res.status(400).json({ error: "Нет семян" });
+
+      const cfg = getActiveCropConfig()[cropType];
+      if (!cfg) return res.status(400).json({ error: "Неизвестная культура" });
+      if (energy < PLANT_ENERGY) return res.status(400).json({ error: `Нужно ${PLANT_ENERGY} энергии для посадки` });
+
+      const growMult = (SEASON_GROWTH_MULTIPLIER[season] ?? 1) * worldCfg.growMultiplier;
+      const growSec = Math.ceil(cfg.growSec * growMult);
+      const now = new Date();
+      const readyAt = new Date(now.getTime() + growSec * 1000);
+
+      energy -= PLANT_ENERGY;
+      seeds[cropType as keyof CropInventory] -= 1;
+      plots = plots.map((p) => p.id === plotId ? { ...p, cropType, status: "growing" as const, plantedAt: now.toISOString(), readyAt: readyAt.toISOString() } : p);
+      quests = updateQuestProgress(quests, "plant", cropType, 1);
+
+    // ── HARVEST ────────────────────────────────────────────────────────────────
+    } else if (action === "harvest") {
+      if (plotId === undefined) return res.status(400).json({ error: "plotId обязателен" });
+      const plot = plots.find((p) => p.id === plotId);
+      if (!plot || plot.status !== "ready" || !plot.cropType) return res.status(400).json({ error: "Урожай ещё не готов" });
+      if (energy < HARVEST_ENERGY) return res.status(400).json({ error: `Нужно ${HARVEST_ENERGY} энергии для сбора` });
+
+      const cfg = getActiveCropConfig()[plot.cropType];
+      const sellMult = SEASON_SELL_MULTIPLIER[season] ?? 1;
+      const extraDouble = worldCfg.doubleChanceBonus > 0 && Math.random() < worldCfg.doubleChanceBonus;
+      const harvestQty = (plot.doubleHarvest || extraDouble) ? 2 : 1;
+      inventory[plot.cropType as keyof CropInventory] = (inventory[plot.cropType as keyof CropInventory] ?? 0) + harvestQty;
+      xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier);
+      energy -= HARVEST_ENERGY;
+      plots = plots.map((p) => p.id === plotId ? { ...p, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null, doubleHarvest: undefined } : p);
+      quests = updateQuestProgress(quests, "harvest", plot.cropType, harvestQty);
+
+    // ── HARVEST ALL ────────────────────────────────────────────────────────────
+    } else if (action === "harvest_all") {
+      const readyPlots = plots.filter((p) => p.status === "ready" && p.cropType);
+      if (readyPlots.length === 0) return res.status(400).json({ error: "Нет готового урожая" });
+      const sellMult = SEASON_SELL_MULTIPLIER[season] ?? 1;
+      const harvestedIds: number[] = [];
+      for (const plot of readyPlots) {
+        if (energy < HARVEST_ENERGY) break;
+        const cfg = getActiveCropConfig()[plot.cropType!];
+        const extraDouble = worldCfg.doubleChanceBonus > 0 && Math.random() < worldCfg.doubleChanceBonus;
+        const harvestQty = (plot.doubleHarvest || extraDouble) ? 2 : 1;
+        inventory[plot.cropType as keyof CropInventory] = (inventory[plot.cropType as keyof CropInventory] ?? 0) + harvestQty;
+        xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier);
+        energy -= HARVEST_ENERGY;
+        quests = updateQuestProgress(quests, "harvest", plot.cropType!, harvestQty);
+        harvestedIds.push(plot.id);
+      }
+      plots = plots.map((p) =>
+        harvestedIds.includes(p.id)
+          ? { ...p, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null, doubleHarvest: undefined }
+          : p
+      );
+
+    // ── UNLOCK WORLD ───────────────────────────────────────────────────────────
+    } else if (action === "unlock_world") {
+      const targetWorldId = req.body.worldId as WorldId;
+      if (!targetWorldId || !WORLD_CONFIG[targetWorldId]) return res.status(400).json({ error: "Неизвестный мир" });
+      if (targetWorldId === "main") return res.status(400).json({ error: "Главная ферма уже разблокирована" });
+      const mainWorld = worlds.main || { plots, unlocked: true };
+      const canUnlock = mainWorld.plots.length >= 25 || plots.length >= 25;
+      if (!canUnlock) return res.status(400).json({ error: "Нужно 25 грядок на главной ферме" });
+      const wCost = WORLD_CONFIG[targetWorldId].unlockCost;
+      if (coins < wCost) return res.status(400).json({ error: `Нужно ${wCost} монет` });
+      if (worlds[targetWorldId]?.unlocked) return res.status(400).json({ error: "Мир уже разблокирован" });
+      coins -= wCost;
+      worlds[targetWorldId] = {
+        plots: Array.from({ length: 9 }, (_, i) => ({ id: i, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null })),
+        unlocked: true,
+        unlockedAt: new Date().toISOString(),
+      };
+
+    // ── SWITCH WORLD ────────────────────────────────────────────────────────────
+    } else if (action === "switch_world") {
+      const targetWorldId = req.body.worldId as WorldId;
+      if (!targetWorldId || !WORLD_CONFIG[targetWorldId]) return res.status(400).json({ error: "Неизвестный мир" });
+      if (targetWorldId === activeWorldId) return res.status(400).json({ error: "Уже на этом поле" });
+      if (!worlds[targetWorldId]?.unlocked) return res.status(400).json({ error: "Мир не разблокирован" });
+      // Save current world's plots
+      worlds[activeWorldId] = { ...(worlds[activeWorldId] || { unlocked: true }), plots };
+      // Load target world's plots
+      const targetWorld = worlds[targetWorldId]!;
+      plots = updatePlotStatuses(targetWorld.plots);
+      activeWorldId = targetWorldId;
+
+    // ── BUY SEEDS ──────────────────────────────────────────────────────────────
+    } else if (action === "buy_seeds") {
+      if (!cropType || !quantity) return res.status(400).json({ error: "cropType и quantity обязательны" });
+      const cfg = getActiveCropConfig()[cropType];
+      if (!cfg) return res.status(400).json({ error: "Неизвестная культура" });
+      const cost = cfg.seedCost * quantity;
+      if (coins < cost) return res.status(400).json({ error: "Недостаточно монет" });
+      coins -= cost;
+      seeds[cropType as keyof CropInventory] = (seeds[cropType as keyof CropInventory] ?? 0) + quantity;
+
+    // ── BUY FROM ROTATING SHOP ─────────────────────────────────────────────────
+    } else if (action === "buy_shop_seed") {
+      const { slotIndex } = req.body as { slotIndex: number };
+      if (slotIndex === undefined) return res.status(400).json({ error: "slotIndex обязателен" });
+      const epoch = currentEpoch();
+      const slots = generateShopSlots(epoch);
+      const slot = slots.find((s) => s.slotIndex === slotIndex);
+      if (!slot) return res.status(400).json({ error: "Слот не найден" });
+      if (slot.outOfStock) return res.status(400).json({ error: "Эта культура недоступна в текущей ротации" });
+      const slotKey = `${epoch}_${slotIndex}`;
+      // Check existing purchases
+      const existing = await db
+        .select()
+        .from(shopPurchasesTable)
+        .where(
+          and(
+            eq(shopPurchasesTable.telegramId, telegramId),
+            eq(shopPurchasesTable.slotKey, slotKey)
+          )
+        );
+      const alreadyBought = existing[0]?.quantity ?? 0;
+      if (alreadyBought >= slot.stock) return res.status(400).json({ error: "Лимит покупок исчерпан" });
+      if (coins < slot.price) return res.status(400).json({ error: "Недостаточно монет" });
+      coins -= slot.price;
+      seeds[slot.cropId as keyof CropInventory] = (seeds[slot.cropId as keyof CropInventory] ?? 0) + 1;
+      // Record purchase
+      if (existing.length > 0) {
+        await db
+          .update(shopPurchasesTable)
+          .set({ quantity: alreadyBought + 1 })
+          .where(
+            and(
+              eq(shopPurchasesTable.telegramId, telegramId),
+              eq(shopPurchasesTable.slotKey, slotKey)
+            )
+          );
+      } else {
+        await db.insert(shopPurchasesTable).values({ telegramId, slotKey, quantity: 1 });
+      }
+
+    // ── SELL CROPS ─────────────────────────────────────────────────────────────
+    } else if (action === "sell_crops") {
+      if (!cropType || !quantity) return res.status(400).json({ error: "cropType и quantity обязательны" });
+      const cfg = getActiveCropConfig()[cropType];
+      if (!cfg) return res.status(400).json({ error: "Неизвестная культура" });
+      const available = inventory[cropType as keyof CropInventory] ?? 0;
+      if (available < quantity) return res.status(400).json({ error: "Недостаточно урожая" });
+      const sellMult = SEASON_SELL_MULTIPLIER[season] ?? 1;
+      const earned = Math.floor(cfg.sellPrice * sellMult) * quantity;
+      coins += earned;
+      inventory[cropType as keyof CropInventory] -= quantity;
+      quests = updateQuestProgress(quests, "sell_crops", cropType, quantity);
+      quests = updateQuestProgress(quests, "sell_any", "coins", earned);
+
+    // ── BUY ANIMAL ─────────────────────────────────────────────────────────────
+    } else if (action === "buy_animal") {
+      if (!cropType) return res.status(400).json({ error: "Тип животного обязателен (cropType)" });
+      const animalType = cropType as "chicken" | "cow" | "sheep";
+      const cfg = ANIMAL_CONFIG[animalType];
+      if (!cfg) return res.status(400).json({ error: "Неизвестный тип животного" });
+      if (getLevelFromXp(xp) < cfg.unlockLevel) return res.status(400).json({ error: `Нужен ${cfg.unlockLevel} уровень` });
+      if (coins < cfg.cost) return res.status(400).json({ error: "Недостаточно монет" });
+      if (animals.length >= 6) return res.status(400).json({ error: "Максимум 6 животных" });
+      coins -= cfg.cost;
+      const newId = animals.length > 0 ? Math.max(...animals.map((a) => a.id)) + 1 : 0;
+      const names: Record<string, string> = { chicken: "Курочка", cow: "Бурёнка", sheep: "Овечка" };
+      animals.push({ id: newId, type: animalType, name: names[animalType] || animalType, fed: false, lastFedAt: null, productReadyAt: null, status: "hungry", level: 1 });
+      quests = updateQuestProgress(quests, "buy_animal", animalType, 1);
+
+    // ── FEED ANIMAL ────────────────────────────────────────────────────────────
+    } else if (action === "feed_animal") {
+      if (animalId === undefined) return res.status(400).json({ error: "animalId обязателен" });
+      const idx = animals.findIndex((a) => a.id === animalId);
+      if (idx === -1) return res.status(400).json({ error: "Животное не найдено" });
+      const animal = animals[idx];
+      if (animal.status === "ready") return res.status(400).json({ error: "Сначала собери продукт!" });
+      if (energy < FEED_ENERGY) return res.status(400).json({ error: `Нужно ${FEED_ENERGY} энергии` });
+      const cfg = ANIMAL_CONFIG[animal.type];
+      const now = new Date();
+      energy -= FEED_ENERGY;
+      animals[idx] = { ...animal, fed: true, lastFedAt: now.toISOString(), productReadyAt: new Date(now.getTime() + cfg.productReadySec * 1000).toISOString(), status: "happy" };
+
+    // ── COLLECT PRODUCT (from animal) ──────────────────────────────────────────
+    } else if (action === "collect_product") {
+      if (animalId === undefined) return res.status(400).json({ error: "animalId обязателен" });
+      const idx = animals.findIndex((a) => a.id === animalId);
+      if (idx === -1) return res.status(400).json({ error: "Животное не найдено" });
+      const animal = animals[idx];
+      if (animal.status !== "ready") return res.status(400).json({ error: "Продукт ещё не готов" });
+      const cfg = ANIMAL_CONFIG[animal.type];
+      products[cfg.productType as keyof ProductInventory] = (products[cfg.productType as keyof ProductInventory] ?? 0) + 1;
+      xp += cfg.xp;
+      animals[idx] = { ...animal, fed: false, lastFedAt: null, productReadyAt: null, status: "hungry" };
+
+    // ── BUILD BUILDING ─────────────────────────────────────────────────────────
+    } else if (action === "build_building") {
+      if (!cropType) return res.status(400).json({ error: "Тип здания обязателен (cropType)" });
+      const buildingType = cropType as "mill" | "bakery" | "dairy";
+      const cfg = BUILDING_CONFIG[buildingType];
+      if (!cfg) return res.status(400).json({ error: "Неизвестный тип здания" });
+      if (getLevelFromXp(xp) < cfg.unlockLevel) return res.status(400).json({ error: `Нужен ${cfg.unlockLevel} уровень` });
+      if (coins < cfg.cost) return res.status(400).json({ error: "Недостаточно монет" });
+      if (buildings.some((b) => b.type === buildingType)) return res.status(400).json({ error: "Здание уже построено" });
+      coins -= cfg.cost;
+      const newId = buildings.length > 0 ? Math.max(...buildings.map((b) => b.id)) + 1 : 0;
+      buildings.push({ id: newId, type: buildingType, level: 1, crafting: null });
+      quests = updateQuestProgress(quests, "build_building", buildingType, 1);
+
+    // ── START CRAFT ────────────────────────────────────────────────────────────
+    } else if (action === "start_craft") {
+      if (!recipe || buildingId === undefined) return res.status(400).json({ error: "recipe и buildingId обязательны" });
+      const bIdx = buildings.findIndex((b) => b.id === buildingId);
+      if (bIdx === -1) return res.status(400).json({ error: "Здание не найдено" });
+      const building = buildings[bIdx];
+      if (building.crafting) {
+        const isReady = new Date() >= new Date(building.crafting.readyAt);
+        if (!isReady) return res.status(400).json({ error: "Здание уже занято" });
+      }
+      const rcfg = RECIPE_CONFIG[recipe];
+      if (!rcfg) return res.status(400).json({ error: "Неизвестный рецепт" });
+      if (rcfg.building !== building.type) return res.status(400).json({ error: "Неверное здание для рецепта" });
+
+      for (const input of rcfg.inputs) {
+        const available = input.itemId in inventory
+          ? (inventory[input.itemId as keyof CropInventory] ?? 0)
+          : (products[input.itemId as keyof ProductInventory] ?? 0);
+        if (available < input.quantity) return res.status(400).json({ error: `Нужно ${input.quantity} ${input.itemId}` });
+      }
+      for (const input of rcfg.inputs) {
+        if (input.itemId in inventory) {
+          inventory[input.itemId as keyof CropInventory] -= input.quantity;
+        } else {
+          products[input.itemId as keyof ProductInventory] -= input.quantity;
+        }
+      }
+      const now = new Date();
+      buildings[bIdx] = { ...building, crafting: { recipe, startedAt: now.toISOString(), readyAt: new Date(now.getTime() + rcfg.craftSec * 1000).toISOString() } };
+
+    // ── COLLECT CRAFT ──────────────────────────────────────────────────────────
+    } else if (action === "collect_craft") {
+      if (buildingId === undefined) return res.status(400).json({ error: "buildingId обязателен" });
+      const bIdx = buildings.findIndex((b) => b.id === buildingId);
+      if (bIdx === -1) return res.status(400).json({ error: "Здание не найдено" });
+      const building = buildings[bIdx];
+      if (!building.crafting) return res.status(400).json({ error: "Ничего не крафтится" });
+      if (new Date() < new Date(building.crafting.readyAt)) return res.status(400).json({ error: "Ещё не готово" });
+      const rcfg = RECIPE_CONFIG[building.crafting.recipe];
+      if (!rcfg) return res.status(400).json({ error: "Неизвестный рецепт" });
+      products[rcfg.outputId as keyof ProductInventory] = (products[rcfg.outputId as keyof ProductInventory] ?? 0) + rcfg.outputQty;
+      xp += rcfg.xp;
+      buildings[bIdx] = { ...building, crafting: null };
+      quests = updateQuestProgress(quests, "collect_craft", rcfg.outputId, 1);
+
+    // ── SELL PRODUCT ───────────────────────────────────────────────────────────
+    } else if (action === "sell_product") {
+      if (!cropType || !quantity) return res.status(400).json({ error: "cropType и quantity обязательны" });
+      const productKey = cropType as keyof ProductInventory;
+      const available = products[productKey] ?? 0;
+      if (available < quantity) return res.status(400).json({ error: "Недостаточно продуктов" });
+      const sellMult = SEASON_SELL_MULTIPLIER[season] ?? 1;
+      const price = PRODUCT_SELL_PRICE[cropType] ?? 10;
+      const earned = Math.floor(price * sellMult) * quantity;
+      coins += earned;
+      products[productKey] -= quantity;
+      quests = updateQuestProgress(quests, "sell_product", cropType, quantity);
+      quests = updateQuestProgress(quests, "sell_any", "coins", earned);
+
+    // ── SELL ALL ───────────────────────────────────────────────────────────────
+    } else if (action === "sell_all") {
+      const sellMult = SEASON_SELL_MULTIPLIER[season] ?? 1;
+      const activeCfg = getActiveCropConfig();
+      let totalEarned = 0;
+
+      for (const [cropId, qty] of Object.entries(inventory)) {
+        const n = (qty as number) ?? 0;
+        if (n <= 0) continue;
+        const cfg = activeCfg[cropId];
+        if (!cfg) continue;
+        const earned = Math.floor(cfg.sellPrice * sellMult) * n;
+        coins += earned;
+        totalEarned += earned;
+        (inventory as Record<string, number>)[cropId] = 0;
+        quests = updateQuestProgress(quests, "sell_crops", cropId, n);
+        quests = updateQuestProgress(quests, "sell_any", "coins", earned);
+      }
+
+      for (const [prodId, qty] of Object.entries(products)) {
+        const n = (qty as number) ?? 0;
+        if (n <= 0) continue;
+        const price = PRODUCT_SELL_PRICE[prodId] ?? 10;
+        const earned = Math.floor(price * sellMult) * n;
+        coins += earned;
+        totalEarned += earned;
+        (products as Record<string, number>)[prodId] = 0;
+        quests = updateQuestProgress(quests, "sell_product", prodId, n);
+        quests = updateQuestProgress(quests, "sell_any", "coins", earned);
+      }
+
+      if (totalEarned === 0) return res.status(400).json({ error: "Амбар уже пуст!" });
+
+    // ── REDEEM PROMO CODE ──────────────────────────────────────────────────────
+    } else if (action === "redeem_promo") {
+      const { promoCode } = req.body as { promoCode?: string };
+      if (!promoCode) return res.status(400).json({ error: "Введите промокод" });
+      const normalized = promoCode.trim().toUpperCase();
+
+      // ── Try admin promo codes first ─────────────────────────────────────────
+      const [promo] = await db.select().from(promocodesTable).where(eq(promocodesTable.code, normalized));
+      if (promo) {
+        if (!promo.active) return res.status(400).json({ error: "Промокод деактивирован" });
+        if (promo.expiresAt && new Date(promo.expiresAt) < new Date())
+          return res.status(400).json({ error: "Срок действия промокода истёк" });
+        if (promo.maxUses !== null && promo.usedCount >= promo.maxUses)
+          return res.status(400).json({ error: "Промокод уже использован максимальное количество раз" });
+
+        const [alreadyUsed] = await db
+          .select()
+          .from(promocodeUsesTable)
+          .where(and(eq(promocodeUsesTable.code, normalized), eq(promocodeUsesTable.telegramId, telegramId)));
+        if (alreadyUsed) return res.status(400).json({ error: "Вы уже использовали этот промокод" });
+
+        coins += promo.rewardCoins;
+        gems += promo.rewardGems;
+        await db.insert(promocodeUsesTable).values({ code: normalized, telegramId });
+        await db.update(promocodesTable).set({ usedCount: promo.usedCount + 1 }).where(eq(promocodesTable.code, normalized));
+      } else {
+        // ── Try player referral codes ─────────────────────────────────────────
+        const [refOwner] = await db
+          .select({ telegramId: farmStateTable.telegramId })
+          .from(farmStateTable)
+          .where(eq(farmStateTable.refCode, normalized));
+
+        if (!refOwner) return res.status(404).json({ error: "Промокод не найден" });
+        if (refOwner.telegramId === telegramId) return res.status(400).json({ error: "Нельзя использовать свой реферальный код" });
+
+        // Check if current player already used any ref code
+        const [alreadyReferred] = await db
+          .select()
+          .from(referralsTable)
+          .where(eq(referralsTable.referredId, telegramId));
+        if (alreadyReferred) return res.status(400).json({ error: "Вы уже использовали реферальный код" });
+
+        const REF_PROMO_COINS = 50;
+        const REF_PROMO_GEMS = 5;
+
+        coins += REF_PROMO_COINS;
+        gems += REF_PROMO_GEMS;
+
+        // Give reward to code owner too
+        await db.update(farmStateTable)
+          .set({ coins: sql`${farmStateTable.coins} + ${REF_PROMO_COINS}`, gems: sql`${farmStateTable.gems} + ${REF_PROMO_GEMS}` })
+          .where(eq(farmStateTable.telegramId, refOwner.telegramId));
+
+        await db.insert(referralsTable).values({ referrerId: refOwner.telegramId, referredId: telegramId, rewardCoins: REF_PROMO_COINS });
+      }
+
+    // ── SET REF CODE ───────────────────────────────────────────────────────────
+    } else if (action === "set_ref_code") {
+      const { code } = req.body as { code?: string };
+      if (!code) return res.status(400).json({ error: "Введите код" });
+      const normalized = code.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "");
+      if (normalized.length < 3 || normalized.length > 15)
+        return res.status(400).json({ error: "Код от 3 до 15 символов (буквы, цифры, _)" });
+
+      // Check not taken by someone else
+      const [existing] = await db
+        .select({ tid: farmStateTable.telegramId })
+        .from(farmStateTable)
+        .where(eq(farmStateTable.refCode, normalized));
+      if (existing && existing.tid !== telegramId)
+        return res.status(400).json({ error: "Этот код уже занят, придумайте другой" });
+
+      await db.update(farmStateTable).set({ refCode: normalized }).where(eq(farmStateTable.telegramId, telegramId));
+
+    // ── COMPLETE NPC ORDER ─────────────────────────────────────────────────────
+    } else if (action === "complete_npc_order") {
+      const { orderId } = req.body;
+      if (!orderId) return res.status(400).json({ error: "orderId обязателен" });
+      const orderIdx = npcOrders.findIndex((o) => o.id === orderId);
+      if (orderIdx === -1) return res.status(400).json({ error: "Заказ не найден" });
+      const order = npcOrders[orderIdx];
+      if (order.completed) return res.status(400).json({ error: "Заказ уже выполнен" });
+      if (new Date() > new Date(order.expiresAt)) return res.status(400).json({ error: "Заказ истёк" });
+
+      for (const item of order.items) {
+        const inInv = item.itemId in inventory;
+        const available = inInv
+          ? (inventory[item.itemId as keyof CropInventory] ?? 0)
+          : (products[item.itemId as keyof ProductInventory] ?? 0);
+        if (available < item.quantity) return res.status(400).json({ error: `Нужно ${item.quantity} ${item.itemId}` });
+      }
+      for (const item of order.items) {
+        const inInv = item.itemId in inventory;
+        if (inInv) inventory[item.itemId as keyof CropInventory] -= item.quantity;
+        else products[item.itemId as keyof ProductInventory] -= item.quantity;
+      }
+      coins += order.reward.coins;
+      xp += order.reward.xp;
+      npcOrders[orderIdx] = { ...order, completed: true };
+
+      if (npcOrders.every((o) => o.completed)) {
+        npcOrders = generateNpcOrders(getLevelFromXp(xp));
+      }
+
+    // ── CLAIM QUEST ────────────────────────────────────────────────────────────
+    } else if (action === "claim_quest") {
+      const { questId } = req.body;
+      if (!questId) return res.status(400).json({ error: "questId обязателен" });
+      const qIdx = quests.findIndex((q) => q.id === questId);
+      if (qIdx === -1) return res.status(400).json({ error: "Задание не найдено" });
+      const quest = quests[qIdx];
+      if (!quest.completed) return res.status(400).json({ error: "Задание не выполнено" });
+      if (quest.claimed) return res.status(400).json({ error: "Награда уже получена" });
+      coins += quest.rewardCoins;
+      xp += quest.rewardXp;
+      if (quest.rewardGems) gems += quest.rewardGems;
+      quests[qIdx] = { ...quest, claimed: true };
+
+    // ── REFRESH ORDERS ─────────────────────────────────────────────────────────
+    } else if (action === "refresh_orders") {
+      npcOrders = generateNpcOrders(getLevelFromXp(xp));
+
+    // ── BUY ENERGY ─────────────────────────────────────────────────────────────
+    } else if (action === "buy_energy") {
+      const { amount: energyAmount } = req.body;
+      const ENERGY_PACKS: Record<number, number> = { 10: 40, 30: 100, 999: 250 };
+      const packAmount = Number(energyAmount);
+      const cost = ENERGY_PACKS[packAmount];
+      if (!cost) return res.status(400).json({ error: "Неверный пакет энергии" });
+      if (coins < cost) return res.status(400).json({ error: "Недостаточно монет" });
+      coins -= cost;
+      energy = Math.min(maxEnergy, energy + (packAmount === 999 ? maxEnergy : packAmount));
+
+    // ── EXPAND PLOTS ────────────────────────────────────────────────────────────
+    } else if (action === "expand_plots") {
+      const EXPAND_TIERS: { maxPlots: number; cost: number }[] = [
+        { maxPlots: 12, cost: 150 },
+        { maxPlots: 15, cost: 300 },
+        { maxPlots: 18, cost: 600 },
+        { maxPlots: 21, cost: 1200 },
+        { maxPlots: 25, cost: 2500 },
+      ];
+      const currentCount = plots.length;
+      const next = EXPAND_TIERS.find((t) => t.maxPlots > currentCount);
+      if (!next) return res.status(400).json({ error: "Достигнут максимум грядок" });
+      if (coins < next.cost) return res.status(400).json({ error: `Нужно ${next.cost} монет` });
+      coins -= next.cost;
+      const addCount = next.maxPlots - currentCount;
+      const maxId = plots.length > 0 ? Math.max(...plots.map((p) => p.id)) : -1;
+      for (let i = 1; i <= addCount; i++) {
+        plots.push({ id: maxId + i, cropType: null, status: "empty", plantedAt: null, readyAt: null });
+      }
+
+    // ── BUY ITEM (premium) ─────────────────────────────────────────────────────
+    } else if (action === "buy_item") {
+      const { itemType, quantity: qty = 1 } = req.body;
+      if (!itemType || !["watering_can", "sprinkler"].includes(itemType)) {
+        return res.status(400).json({ error: "Неверный тип предмета" });
+      }
+      const cfg = ITEM_CONFIG[itemType as keyof typeof ITEM_CONFIG];
+      const isPack = qty === cfg.packQty;
+      const gemCost = isPack ? cfg.gemCostPack : cfg.gemCostSingle * qty;
+      if (gems < gemCost) return res.status(400).json({ error: "Недостаточно 💎 кристаллов" });
+      gems -= gemCost;
+      if (itemType === "watering_can") {
+        items.wateringCans = (items.wateringCans ?? 0) + qty;
+      } else {
+        items.sprinklers = (items.sprinklers ?? 0) + qty;
+      }
+
+    // ── USE ITEM ────────────────────────────────────────────────────────────────
+    } else if (action === "use_item") {
+      const { itemType, plotId: targetPlotId } = req.body;
+      if (!itemType || targetPlotId === undefined) {
+        return res.status(400).json({ error: "itemType и plotId обязательны" });
+      }
+
+      if (itemType === "watering_can") {
+        if ((items.wateringCans ?? 0) <= 0) return res.status(400).json({ error: "Нет леек в инвентаре" });
+        const plot = plots.find((p) => p.id === targetPlotId);
+        if (!plot || plot.status !== "growing") return res.status(400).json({ error: "Грядка не растёт" });
+        const cfg = ITEM_CONFIG.watering_can;
+        plots = plots.map((p) => p.id === targetPlotId ? applyWateringEffect(p, cfg.growthReduction, cfg.doubleHarvestChance) : p);
+        items.wateringCans -= 1;
+
+      } else if (itemType === "sprinkler") {
+        if ((items.sprinklers ?? 0) <= 0) return res.status(400).json({ error: "Нет спринклеров в инвентаре" });
+        const cfg = ITEM_CONFIG.sprinkler;
+        const affectedIds = getSprinklerAffected(targetPlotId, plots);
+        plots = plots.map((p) =>
+          affectedIds.includes(p.id) ? applyWateringEffect(p, cfg.growthReduction, cfg.doubleHarvestChance) : p
+        );
+        const now = new Date();
+        const newSprinkler: ActiveSprinkler = {
+          id: `sp_${now.getTime()}`,
+          centerPlotId: targetPlotId,
+          affectedPlotIds: affectedIds,
+          placedAt: now.toISOString(),
+          expiresAt: new Date(now.getTime() + cfg.durationMs).toISOString(),
+        };
+        activeSprinklers.push(newSprinkler);
+        items.sprinklers -= 1;
+
+      } else {
+        return res.status(400).json({ error: "Неверный тип предмета" });
+      }
+
+    // ── OPEN CASE ───────────────────────────────────────────────────────────────
+    } else if (action === "open_case") {
+      const { caseId } = req.body;
+
+      let cropId: string;
+      let qty: number;
+      let rarity: CaseRarity;
+
+      const staticCaseCfg = GEM_CASES[caseId as string];
+      const customCaseCfg = (getAdminConfig().customCases ?? {})[caseId as string];
+
+      if (staticCaseCfg) {
+        // ── Static (built-in) case ──
+        if (gems < staticCaseCfg.gemCost) return res.status(400).json({ error: `Нужно ${staticCaseCfg.gemCost} 💎 кристаллов` });
+
+        const roll = Math.random();
+        let cumulative = 0;
+        rarity = "rare";
+        for (const w of staticCaseCfg.weights) {
+          cumulative += w.chance;
+          if (roll < cumulative) { rarity = w.rarity; break; }
+        }
+
+        const pool = CASE_RARITY_CROPS[rarity];
+        cropId = pool[Math.floor(Math.random() * pool.length)];
+        qty = staticCaseCfg.minSeeds + Math.floor(Math.random() * (staticCaseCfg.maxSeeds - staticCaseCfg.minSeeds + 1));
+        gems -= staticCaseCfg.gemCost;
+
+      } else if (customCaseCfg) {
+        // ── Custom (admin-created) case ──
+        if (!customCaseCfg.active) return res.status(400).json({ error: "Кейс недоступен" });
+        if (gems < customCaseCfg.gemCost) return res.status(400).json({ error: `Нужно ${customCaseCfg.gemCost} 💎 кристаллов` });
+
+        const roll = Math.random();
+        let cumulative = 0;
+        let selectedDrop = customCaseCfg.drops[customCaseCfg.drops.length - 1];
+        for (const drop of customCaseCfg.drops) {
+          cumulative += drop.chance;
+          if (roll < cumulative) { selectedDrop = drop; break; }
+        }
+
+        cropId = selectedDrop.cropId;
+        qty = selectedDrop.minQty + Math.floor(Math.random() * (selectedDrop.maxQty - selectedDrop.minQty + 1));
+        // Determine display rarity for the reveal animation
+        rarity = CASE_RARITY_CROPS.legendary.includes(cropId) ? "legendary"
+               : CASE_RARITY_CROPS.epic.includes(cropId)      ? "epic"
+               : "rare";
+        gems -= customCaseCfg.gemCost;
+
+      } else {
+        return res.status(400).json({ error: "Неизвестный кейс" });
+      }
+
+      seeds[cropId as keyof CropInventory] = ((seeds[cropId as keyof CropInventory] as number) ?? 0) + qty;
+
+      // Store result in response extras (attach to the farm response)
+      const caseResult = { cropId, qty, rarity };
+      const level = getLevelFromXp(xp);
+      if (level > farm.level) maxEnergy = Math.min(60, 30 + level * 2);
+      worlds[activeWorldId] = { ...(worlds[activeWorldId] || { unlocked: true }), plots };
+      await db.update(farmStateTable).set({
+        plots, coins, gems, xp, level, energy, maxEnergy,
+        animals, buildings, products, inventory, seeds,
+        quests, npcOrders, items, activeSprinklers,
+        worlds, activeWorldId,
+        updatedAt: new Date(),
+      }).where(eq(farmStateTable.telegramId, telegramId));
+      const farmOut = serializeFarm({ ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId }, telegramId);
+      return res.json({ ...farmOut, caseResult });
+
+    } else {
+      return res.status(400).json({ error: "Неизвестное действие" });
+    }
+
+    const level = getLevelFromXp(xp);
+    if (level > farm.level) {
+      maxEnergy = Math.min(60, 30 + level * 2);
+      xp = xp;
+    }
+
+    // Keep worlds in sync with active plots
+    worlds[activeWorldId] = { ...(worlds[activeWorldId] || { unlocked: true }), plots };
+
+    await db.update(farmStateTable).set({
+      plots, coins, gems, xp, level, energy, maxEnergy,
+      animals, buildings, products, inventory, seeds,
+      quests, npcOrders, items, activeSprinklers,
+      worlds, activeWorldId,
+      updatedAt: new Date(),
+    }).where(eq(farmStateTable.telegramId, telegramId));
+
+    res.json(serializeFarm({ ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId }, telegramId));
+  } catch (err) {
+    console.error("performFarmAction error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─────────────────────────────────── Serializer ───────────────────────────────
+
+function serializeFarm(farm: any, telegramId: string) {
+  const season = typeof farm.season === "string" ? farm.season as Season : "spring";
+  const now = new Date();
+  const activeSprinklers = ((farm.activeSprinklers as ActiveSprinkler[]) || [])
+    .filter((s) => new Date(s.expiresAt) > now);
+  return {
+    telegramId,
+    coins: farm.coins,
+    gems: farm.gems,
+    level: farm.level,
+    xp: farm.xp,
+    energy: farm.energy,
+    maxEnergy: farm.maxEnergy,
+    season,
+    seasonName: SEASON_NAMES[season],
+    plots: farm.plots,
+    inventory: farm.inventory,
+    seeds: farm.seeds,
+    animals: farm.animals,
+    buildings: farm.buildings,
+    products: farm.products,
+    quests: farm.quests,
+    npcOrders: farm.npcOrders,
+    items: (farm.items as ItemInventory) || emptyItems(),
+    activeSprinklers,
+    activeWorldId: (farm.activeWorldId as WorldId) || "main",
+    worlds: (farm.worlds as WorldsData) || defaultWorlds(),
+    worldConfig: getEffectiveWorldConfig(),
+    itemConfig: ITEM_CONFIG,
+    cropConfig: getActiveCropConfig(),
+    customCropMeta: getAdminConfig().customCrops ?? {},
+    customCaseMeta: getAdminConfig().customCases ?? {},
+    animalConfig: ANIMAL_CONFIG,
+    buildingConfig: BUILDING_CONFIG,
+    recipeConfig: RECIPE_CONFIG,
+    username: farm.username ?? null,
+    firstName: farm.firstName ?? null,
+    refCode: farm.refCode ?? null,
+    updatedAt: farm.updatedAt instanceof Date ? farm.updatedAt.toISOString() : farm.updatedAt,
+  };
+}
+
+export default router;

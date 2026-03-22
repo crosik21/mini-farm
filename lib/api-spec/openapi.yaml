@@ -1,15 +1,16 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Mini Farm Telegram Web App API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: farm
+    description: Farm game operations
 paths:
   /healthz:
     get:
@@ -24,6 +25,56 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /farm/{telegramId}:
+    get:
+      operationId: getFarmState
+      tags: [farm]
+      summary: Get farm state
+      description: Returns the current farm state for a user
+      parameters:
+        - name: telegramId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Farm state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FarmState"
+  /farm/{telegramId}/action:
+    post:
+      operationId: performFarmAction
+      tags: [farm]
+      summary: Perform a farm action
+      description: Plant, water, or harvest a crop, or buy seeds
+      parameters:
+        - name: telegramId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FarmAction"
+      responses:
+        "200":
+          description: Updated farm state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FarmState"
+        "400":
+          description: Invalid action
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +84,101 @@ components:
           type: string
       required:
         - status
-
+    CropType:
+      type: string
+      enum: [wheat, carrot, tomato, corn, strawberry]
+    CropStatus:
+      type: string
+      enum: [empty, planted, growing, ready]
+    PlotState:
+      type: object
+      properties:
+        id:
+          type: integer
+        cropType:
+          $ref: "#/components/schemas/CropType"
+          nullable: true
+        status:
+          $ref: "#/components/schemas/CropStatus"
+        plantedAt:
+          type: string
+          nullable: true
+        readyAt:
+          type: string
+          nullable: true
+      required:
+        - id
+        - status
+    Inventory:
+      type: object
+      properties:
+        wheat:
+          type: integer
+        carrot:
+          type: integer
+        tomato:
+          type: integer
+        corn:
+          type: integer
+        strawberry:
+          type: integer
+      required:
+        - wheat
+        - carrot
+        - tomato
+        - corn
+        - strawberry
+    FarmState:
+      type: object
+      properties:
+        telegramId:
+          type: string
+        coins:
+          type: integer
+        level:
+          type: integer
+        xp:
+          type: integer
+        plots:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlotState"
+        inventory:
+          $ref: "#/components/schemas/Inventory"
+        seeds:
+          $ref: "#/components/schemas/Inventory"
+        updatedAt:
+          type: string
+      required:
+        - telegramId
+        - coins
+        - level
+        - xp
+        - plots
+        - inventory
+        - seeds
+        - updatedAt
+    FarmAction:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [plant, harvest, buy_seeds, sell_crops]
+        plotId:
+          type: integer
+          nullable: true
+        cropType:
+          $ref: "#/components/schemas/CropType"
+          nullable: true
+        quantity:
+          type: integer
+          nullable: true
+      required:
+        - action
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error

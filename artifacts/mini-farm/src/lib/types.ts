@@ -1,0 +1,214 @@
+export interface PlotState {
+  id: number;
+  cropType: string | null;
+  status: "empty" | "growing" | "ready";
+  plantedAt: string | null;
+  readyAt: string | null;
+  doubleHarvest?: boolean;
+}
+
+export interface ItemInventory {
+  wateringCans: number;
+  sprinklers: number;
+}
+
+export interface ActiveSprinkler {
+  id: string;
+  centerPlotId: number;
+  affectedPlotIds: number[];
+  placedAt: string;
+  expiresAt: string;
+}
+
+export interface AnimalState {
+  id: number;
+  type: "chicken" | "cow" | "sheep" | "pig" | "bee";
+  name: string;
+  fed: boolean;
+  lastFedAt: string | null;
+  productReadyAt: string | null;
+  status: "hungry" | "happy" | "ready";
+  level: number;
+}
+
+export interface BuildingState {
+  id: number;
+  type: "mill" | "bakery" | "dairy" | "kitchen";
+  level: number;
+  crafting: CraftingSlot | null;
+}
+
+export interface CraftingSlot {
+  recipe: string;
+  startedAt: string;
+  readyAt: string;
+}
+
+export interface CropInventory extends Record<string, number> {
+  wheat: number;
+  carrot: number;
+  tomato: number;
+  corn: number;
+  strawberry: number;
+  pumpkin: number;
+  sunflower: number;
+  blueberry?: number;
+  mushroom?: number;
+  cactus_fruit?: number;
+  dates?: number;
+  cranberry?: number;
+  ice_root?: number;
+}
+
+export interface ProductInventory extends Record<string, number> {
+  egg: number;
+  milk: number;
+  wool: number;
+  flour: number;
+  bread: number;
+  cheese: number;
+  corn_starch?: number;
+  berry_juice?: number;
+  corn_bread?: number;
+  pumpkin_pie?: number;
+  berry_jam?: number;
+  mushroom_soup?: number;
+  ice_cream?: number;
+}
+
+export interface QuestState {
+  id: string;
+  type: "daily" | "story";
+  title: string;
+  description: string;
+  goal: { action: string; target: string; amount: number };
+  progress: number;
+  completed: boolean;
+  claimed: boolean;
+  rewardCoins: number;
+  rewardXp: number;
+  rewardGems?: number;
+}
+
+export interface NpcOrder {
+  id: string;
+  npcName: string;
+  npcEmoji: string;
+  items: { itemId: string; quantity: number }[];
+  reward: { coins: number; xp: number };
+  expiresAt: string;
+  completed: boolean;
+}
+
+export type WorldId = "main" | "forest" | "desert" | "snow";
+
+export interface WorldData {
+  plots: PlotState[];
+  unlocked: boolean;
+  unlockedAt?: string;
+}
+
+export interface WorldConfig {
+  name: string;
+  emoji: string;
+  bg1: string;
+  bg2: string;
+  bonus: string | null;
+  bonusDesc: string;
+  crops: string[];
+  unlockCost: number;
+  growMultiplier: number;
+  xpMultiplier: number;
+  doubleChanceBonus: number;
+}
+
+export interface CustomCropMeta {
+  id: string;
+  name: string;
+  emoji: string;
+  world: string;
+  seedCost: number;
+  sellPrice: number;
+  growSec: number;
+  xp: number;
+  energyCost: number;
+  unlockLevel: number;
+  description: string;
+}
+
+export interface CustomCaseDrop {
+  cropId: string;
+  chance: number;
+  minQty: number;
+  maxQty: number;
+}
+
+export interface CustomCaseMeta {
+  id: string;
+  name: string;
+  emoji: string;
+  gemCost: number;
+  description: string;
+  color: string;
+  glowColor: string;
+  active: boolean;
+  drops: CustomCaseDrop[];
+}
+
+export interface FarmData {
+  telegramId: string;
+  username: string | null;
+  firstName: string | null;
+  refCode: string | null;
+  coins: number;
+  gems: number;
+  level: number;
+  xp: number;
+  energy: number;
+  maxEnergy: number;
+  season: string;
+  seasonName: string;
+  plots: PlotState[];
+  inventory: CropInventory;
+  seeds: CropInventory;
+  animals: AnimalState[];
+  buildings: BuildingState[];
+  products: ProductInventory;
+  quests: QuestState[];
+  npcOrders: NpcOrder[];
+  items: ItemInventory;
+  activeSprinklers: ActiveSprinkler[];
+  activeWorldId: WorldId;
+  worlds: Record<WorldId, WorldData>;
+  worldConfig: Record<WorldId, WorldConfig>;
+  customCropMeta?: Record<string, CustomCropMeta>;
+  customCaseMeta?: Record<string, CustomCaseMeta>;
+  updatedAt: string;
+}
+
+export type FarmAction =
+  | { action: "plant"; plotId: number; cropType: string }
+  | { action: "harvest"; plotId: number }
+  | { action: "buy_seeds"; cropType: string; quantity: number }
+  | { action: "sell_crops"; cropType: string; quantity: number }
+  | { action: "buy_animal"; cropType: string }
+  | { action: "feed_animal"; animalId: number }
+  | { action: "collect_product"; animalId: number }
+  | { action: "build_building"; cropType: string }
+  | { action: "start_craft"; recipe: string; buildingId: number }
+  | { action: "collect_craft"; buildingId: number }
+  | { action: "sell_product"; cropType: string; quantity: number }
+  | { action: "sell_all" }
+  | { action: "redeem_promo"; promoCode: string }
+  | { action: "complete_npc_order"; orderId: string }
+  | { action: "claim_quest"; questId: string }
+  | { action: "refresh_orders" }
+  | { action: "buy_energy"; amount: number }
+  | { action: "expand_plots" }
+  | { action: "harvest_all" }
+  | { action: "unlock_world"; worldId: WorldId }
+  | { action: "switch_world"; worldId: WorldId }
+  | { action: "buy_item"; itemType: "watering_can" | "sprinkler"; quantity: number }
+  | { action: "use_item"; itemType: "watering_can" | "sprinkler"; plotId: number }
+  | { action: "open_case"; caseId: string }
+  | { action: "set_ref_code"; code: string };

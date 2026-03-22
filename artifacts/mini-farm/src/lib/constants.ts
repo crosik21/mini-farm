@@ -1,0 +1,284 @@
+export interface CropConfig {
+  id: string;
+  name: string;
+  emoji: string;
+  seedCost: number;
+  sellPrice: number;
+  growTimeSec: number;
+  description: string;
+  unlockLevel: number;
+}
+
+export interface AnimalConfig {
+  type: string;
+  name: string;
+  emoji: string;
+  cost: number;
+  productType: string;
+  productReadySec: number;
+  unlockLevel: number;
+}
+
+export interface BuildingConfig {
+  type: string;
+  name: string;
+  emoji: string;
+  cost: number;
+  unlockLevel: number;
+}
+
+export interface RecipeConfig {
+  id: string;
+  name: string;
+  building: string;
+  inputs: { itemId: string; quantity: number }[];
+  outputId: string;
+  outputQty: number;
+  craftSec: number;
+  sellPrice: number;
+}
+
+export const CROPS: Record<string, CropConfig> = {
+  wheat:        { id: "wheat",        name: "Пшеница",        emoji: "🌾", seedCost: 5,   sellPrice: 8,   growTimeSec: 30,   description: "Быстро растёт, идеально для начала.", unlockLevel: 1 },
+  carrot:       { id: "carrot",       name: "Морковь",        emoji: "🥕", seedCost: 10,  sellPrice: 16,  growTimeSec: 60,   description: "Хрустящая и прибыльная.", unlockLevel: 1 },
+  tomato:       { id: "tomato",       name: "Помидор",        emoji: "🍅", seedCost: 20,  sellPrice: 35,  growTimeSec: 120,  description: "Сочный и выгодный.", unlockLevel: 2 },
+  corn:         { id: "corn",         name: "Кукуруза",       emoji: "🌽", seedCost: 35,  sellPrice: 80,  growTimeSec: 300,  description: "Золото полей.", unlockLevel: 3 },
+  strawberry:   { id: "strawberry",   name: "Клубника",       emoji: "🍓", seedCost: 60,  sellPrice: 180, growTimeSec: 600,  description: "Сладкий и дорогой ягодный.", unlockLevel: 4 },
+  sunflower:    { id: "sunflower",    name: "Подсолнух",      emoji: "🌻", seedCost: 80,  sellPrice: 220, growTimeSec: 900,  description: "Яркий символ лета.", unlockLevel: 5 },
+  pumpkin:      { id: "pumpkin",      name: "Тыква",          emoji: "🎃", seedCost: 150, sellPrice: 500, growTimeSec: 1800, description: "Осенняя королева.", unlockLevel: 7 },
+  // 🌲 Лесная ферма
+  blueberry:    { id: "blueberry",    name: "Голубика",       emoji: "🫐", seedCost: 25,  sellPrice: 65,  growTimeSec: 180,  description: "Лесная ягода, растёт быстро.", unlockLevel: 1 },
+  mushroom:     { id: "mushroom",     name: "Гриб",           emoji: "🍄", seedCost: 70,  sellPrice: 185, growTimeSec: 500,  description: "Дикий гриб, редкий и ценный.", unlockLevel: 1 },
+  // 🏜️ Пустыня
+  cactus_fruit: { id: "cactus_fruit", name: "Плод кактуса",  emoji: "🌵", seedCost: 110, sellPrice: 330, growTimeSec: 1200, description: "Медленно, но очень выгодно.", unlockLevel: 1 },
+  dates:        { id: "dates",        name: "Финики",         emoji: "🌴", seedCost: 190, sellPrice: 680, growTimeSec: 2400, description: "Редкий деликатес пустыни.", unlockLevel: 1 },
+  // ❄️ Снежная ферма
+  cranberry:    { id: "cranberry",    name: "Клюква",         emoji: "🍒", seedCost: 45,  sellPrice: 115, growTimeSec: 400,  description: "Кислая ягода севера.", unlockLevel: 1 },
+  ice_root:     { id: "ice_root",     name: "Ледяной корень", emoji: "🌿", seedCost: 110, sellPrice: 285, growTimeSec: 800,  description: "Мистический корень тундры.", unlockLevel: 1 },
+};
+
+export const ANIMALS: Record<string, AnimalConfig> = {
+  chicken: { type: "chicken", name: "Курица",   emoji: "🐔", cost: 200,  productType: "egg",   productReadySec: 300, unlockLevel: 2 },
+  cow:     { type: "cow",     name: "Корова",   emoji: "🐄", cost: 600,  productType: "milk",  productReadySec: 600, unlockLevel: 4 },
+  sheep:   { type: "sheep",   name: "Овца",     emoji: "🐑", cost: 400,  productType: "wool",  productReadySec: 480, unlockLevel: 3 },
+  pig:     { type: "pig",     name: "Свинья",   emoji: "🐷", cost: 800,  productType: "meat",  productReadySec: 720, unlockLevel: 5 },
+  bee:     { type: "bee",     name: "Пчела",    emoji: "🐝", cost: 1200, productType: "honey", productReadySec: 600, unlockLevel: 7 },
+};
+
+export const BUILDINGS: Record<string, BuildingConfig> = {
+  mill:    { type: "mill",    name: "Мельница",     emoji: "⚙️",  cost: 300, unlockLevel: 3 },
+  bakery:  { type: "bakery",  name: "Пекарня",      emoji: "🍞",  cost: 600, unlockLevel: 5 },
+  kitchen: { type: "kitchen", name: "Кухня",        emoji: "🍳",  cost: 900, unlockLevel: 6 },
+  dairy:   { type: "dairy",   name: "Молочный цех", emoji: "🧀",  cost: 800, unlockLevel: 7 },
+};
+
+export const RECIPES: Record<string, RecipeConfig> = {
+  // ── Мельница
+  flour:        { id: "flour",        name: "Мука",               building: "mill",   inputs: [{ itemId: "wheat",      quantity: 2 }],                                                    outputId: "flour",        outputQty: 1, craftSec: 60,   sellPrice: 20   },
+  corn_starch:  { id: "corn_starch",  name: "Кукурузный крахмал", building: "mill",   inputs: [{ itemId: "corn",       quantity: 2 }],                                                    outputId: "corn_starch",  outputQty: 1, craftSec: 90,   sellPrice: 180  },
+  berry_juice:  { id: "berry_juice",  name: "Ягодный сок",        building: "mill",   inputs: [{ itemId: "blueberry",  quantity: 3 }],                                                    outputId: "berry_juice",  outputQty: 1, craftSec: 120,  sellPrice: 160  },
+  // ── Пекарня
+  bread:        { id: "bread",        name: "Хлеб",               building: "bakery", inputs: [{ itemId: "flour",       quantity: 1 }, { itemId: "egg",      quantity: 1 }],              outputId: "bread",        outputQty: 1, craftSec: 120,  sellPrice: 70   },
+  corn_bread:   { id: "corn_bread",   name: "Кукурузный хлеб",    building: "bakery", inputs: [{ itemId: "corn_starch", quantity: 1 }, { itemId: "egg",      quantity: 1 }],              outputId: "corn_bread",   outputQty: 1, craftSec: 240,  sellPrice: 380  },
+  pumpkin_pie:  { id: "pumpkin_pie",  name: "Тыквенный пирог",    building: "bakery", inputs: [{ itemId: "pumpkin",     quantity: 1 }, { itemId: "flour",    quantity: 2 }, { itemId: "egg", quantity: 1 }], outputId: "pumpkin_pie",  outputQty: 1, craftSec: 1200, sellPrice: 1100 },
+  // ── Молочный цех
+  cheese:       { id: "cheese",       name: "Сыр",                building: "dairy",   inputs: [{ itemId: "milk",        quantity: 2 }],                                                    outputId: "cheese",       outputQty: 1, craftSec: 600,  sellPrice: 90   },
+  berry_jam:    { id: "berry_jam",    name: "Ягодный джем",       building: "dairy",   inputs: [{ itemId: "blueberry",   quantity: 4 }],                                                    outputId: "berry_jam",    outputQty: 1, craftSec: 300,  sellPrice: 200  },
+  mushroom_soup:{ id: "mushroom_soup",name: "Грибной суп",        building: "dairy",   inputs: [{ itemId: "mushroom",    quantity: 2 }, { itemId: "milk",     quantity: 1 }],              outputId: "mushroom_soup",outputQty: 1, craftSec: 600,  sellPrice: 420  },
+  ice_cream:    { id: "ice_cream",    name: "Мороженое",          building: "dairy",   inputs: [{ itemId: "milk",        quantity: 2 }, { itemId: "ice_root", quantity: 1 }],              outputId: "ice_cream",    outputQty: 1, craftSec: 900,  sellPrice: 620  },
+  honey_yogurt: { id: "honey_yogurt", name: "Медовый йогурт",     building: "dairy",   inputs: [{ itemId: "honey",       quantity: 1 }, { itemId: "milk",     quantity: 1 }],              outputId: "honey_yogurt", outputQty: 1, craftSec: 400,  sellPrice: 360  },
+  // ── Кухня
+  bacon:        { id: "bacon",        name: "Бекон",              building: "kitchen", inputs: [{ itemId: "meat",        quantity: 1 }],                                                    outputId: "bacon",        outputQty: 1, craftSec: 180,  sellPrice: 220  },
+  honey_bread:  { id: "honey_bread",  name: "Медовый хлеб",       building: "kitchen", inputs: [{ itemId: "honey",       quantity: 1 }, { itemId: "flour",    quantity: 1 }],              outputId: "honey_bread",  outputQty: 1, craftSec: 300,  sellPrice: 400  },
+  roast:        { id: "roast",        name: "Жаркое",             building: "kitchen", inputs: [{ itemId: "meat",        quantity: 1 }, { itemId: "mushroom", quantity: 1 }],              outputId: "roast",        outputQty: 1, craftSec: 480,  sellPrice: 600  },
+};
+
+export const PRODUCTS: Record<string, { name: string; emoji: string; sellPrice: number }> = {
+  egg:          { name: "Яйцо",               emoji: "🥚",  sellPrice: 15   },
+  milk:         { name: "Молоко",             emoji: "🥛",  sellPrice: 25   },
+  wool:         { name: "Шерсть",             emoji: "🧶",  sellPrice: 22   },
+  meat:         { name: "Мясо",               emoji: "🥩",  sellPrice: 35   },
+  honey:        { name: "Мёд",                emoji: "🍯",  sellPrice: 50   },
+  flour:        { name: "Мука",               emoji: "🌾",  sellPrice: 20   },
+  bread:        { name: "Хлеб",               emoji: "🍞",  sellPrice: 70   },
+  cheese:       { name: "Сыр",                emoji: "🧀",  sellPrice: 90   },
+  corn_starch:  { name: "Кукурузный крахмал", emoji: "🌽",  sellPrice: 180  },
+  berry_juice:  { name: "Ягодный сок",        emoji: "🍹",  sellPrice: 160  },
+  corn_bread:   { name: "Кукурузный хлеб",    emoji: "🫓",  sellPrice: 380  },
+  pumpkin_pie:  { name: "Тыквенный пирог",    emoji: "🥧",  sellPrice: 1100 },
+  berry_jam:    { name: "Ягодный джем",       emoji: "🫙",  sellPrice: 200  },
+  mushroom_soup:{ name: "Грибной суп",        emoji: "🍲",  sellPrice: 420  },
+  ice_cream:    { name: "Мороженое",          emoji: "🍦",  sellPrice: 620  },
+  honey_yogurt: { name: "Медовый йогурт",     emoji: "🫙",  sellPrice: 360  },
+  bacon:        { name: "Бекон",              emoji: "🥓",  sellPrice: 220  },
+  honey_bread:  { name: "Медовый хлеб",       emoji: "🍯",  sellPrice: 400  },
+  roast:        { name: "Жаркое",             emoji: "🍖",  sellPrice: 600  },
+};
+
+// ── Эксклюзивные культуры (только из кейсов) ─────────────────────────────────
+export const EXCLUSIVE_CROPS: Record<string, CropConfig> = {
+  dragon_fruit:  { id: "dragon_fruit",  name: "Драконий плод",      emoji: "🐲", seedCost: 0, sellPrice: 2000, growTimeSec: 7200, description: "Легендарный плод дракона. Только из кейсов.", unlockLevel: 1 },
+  starfruit:     { id: "starfruit",     name: "Карамбола",           emoji: "⭐", seedCost: 0, sellPrice: 900,  growTimeSec: 3600, description: "Экзотический звёздный фрукт. Только из кейсов.", unlockLevel: 1 },
+  moonberry:     { id: "moonberry",     name: "Лунная ягода",        emoji: "🌙", seedCost: 0, sellPrice: 700,  growTimeSec: 2400, description: "Ягода, созревающая под луной. Только из кейсов.", unlockLevel: 1 },
+  lucky_clover:  { id: "lucky_clover",  name: "Клевер удачи",        emoji: "🍀", seedCost: 0, sellPrice: 350,  growTimeSec: 900,  description: "Приносит удачу тому, кто его вырастит.", unlockLevel: 1 },
+  rainbow_corn:  { id: "rainbow_corn",  name: "Радужная кукуруза",   emoji: "🌈", seedCost: 0, sellPrice: 290,  growTimeSec: 600,  description: "Яркая кукуруза всех цветов радуги.", unlockLevel: 1 },
+};
+
+export type CaseRarity = "rare" | "epic" | "legendary";
+
+export interface GemCaseConfig {
+  id: string;
+  name: string;
+  emoji: string;
+  gemCost: number;
+  description: string;
+  color: string;
+  glowColor: string;
+  borderColor: string;
+  textColor: string;
+  weights: { rarity: CaseRarity; chance: number }[];
+  minSeeds: number;
+  maxSeeds: number;
+}
+
+export const CASE_CROP_RARITY: Record<string, CaseRarity> = {
+  rainbow_corn: "rare",
+  lucky_clover: "rare",
+  moonberry:    "epic",
+  starfruit:    "epic",
+  dragon_fruit: "legendary",
+};
+
+export const CASE_RARITY_CROPS: Record<CaseRarity, string[]> = {
+  rare:      ["rainbow_corn", "lucky_clover"],
+  epic:      ["moonberry", "starfruit"],
+  legendary: ["dragon_fruit"],
+};
+
+export const GEM_CASES: GemCaseConfig[] = [
+  {
+    id: "green_case",
+    name: "Зелёный кейс",
+    emoji: "🌿",
+    gemCost: 25,
+    description: "Редкие и эпические семена с шансом легенды",
+    color: "from-emerald-500 to-green-600",
+    glowColor: "rgba(52,211,153,0.5)",
+    borderColor: "border-emerald-400",
+    textColor: "text-emerald-600",
+    weights: [
+      { rarity: "rare",      chance: 0.70 },
+      { rarity: "epic",      chance: 0.25 },
+      { rarity: "legendary", chance: 0.05 },
+    ],
+    minSeeds: 2,
+    maxSeeds: 4,
+  },
+  {
+    id: "blue_case",
+    name: "Синий кейс",
+    emoji: "💠",
+    gemCost: 55,
+    description: "Больше шансов на эпик и легендарные семена",
+    color: "from-blue-500 to-indigo-600",
+    glowColor: "rgba(99,102,241,0.5)",
+    borderColor: "border-blue-400",
+    textColor: "text-blue-600",
+    weights: [
+      { rarity: "rare",      chance: 0.20 },
+      { rarity: "epic",      chance: 0.60 },
+      { rarity: "legendary", chance: 0.20 },
+    ],
+    minSeeds: 3,
+    maxSeeds: 5,
+  },
+  {
+    id: "golden_case",
+    name: "Золотой кейс",
+    emoji: "👑",
+    gemCost: 110,
+    description: "Только эпик и легендарные — гарантированно",
+    color: "from-amber-400 to-orange-500",
+    glowColor: "rgba(251,191,36,0.6)",
+    borderColor: "border-amber-400",
+    textColor: "text-amber-600",
+    weights: [
+      { rarity: "rare",      chance: 0.00 },
+      { rarity: "epic",      chance: 0.35 },
+      { rarity: "legendary", chance: 0.65 },
+    ],
+    minSeeds: 5,
+    maxSeeds: 8,
+  },
+];
+
+export const CASE_RARITY_LABELS: Record<CaseRarity, string> = {
+  rare:      "Редкое",
+  epic:      "Эпическое",
+  legendary: "Легендарное",
+};
+
+export const CASE_RARITY_COLORS: Record<CaseRarity, { text: string; bg: string; border: string; glow: string }> = {
+  rare:      { text: "text-blue-600",   bg: "bg-blue-50",   border: "border-blue-300",   glow: "rgba(59,130,246,0.4)"  },
+  epic:      { text: "text-purple-600", bg: "bg-purple-50", border: "border-purple-300", glow: "rgba(147,51,234,0.4)"  },
+  legendary: { text: "text-amber-600",  bg: "bg-amber-50",  border: "border-amber-300",  glow: "rgba(245,158,11,0.5)"  },
+};
+
+export const ITEM_NAMES: Record<string, string> = {
+  wheat: "Пшеница", carrot: "Морковь", tomato: "Помидор", corn: "Кукуруза",
+  strawberry: "Клубника", sunflower: "Подсолнух", pumpkin: "Тыква",
+  blueberry: "Голубика", mushroom: "Гриб", cactus_fruit: "Плод кактуса",
+  dates: "Финики", cranberry: "Клюква", ice_root: "Ледяной корень",
+  egg: "Яйцо", milk: "Молоко", wool: "Шерсть", meat: "Мясо", honey: "Мёд",
+  flour: "Мука", bread: "Хлеб", cheese: "Сыр",
+  corn_starch: "Кукурузный крахмал", berry_juice: "Ягодный сок",
+  corn_bread: "Кукурузный хлеб", pumpkin_pie: "Тыквенный пирог",
+  berry_jam: "Ягодный джем", mushroom_soup: "Грибной суп", ice_cream: "Мороженое",
+  honey_yogurt: "Медовый йогурт", bacon: "Бекон", honey_bread: "Медовый хлеб", roast: "Жаркое",
+  // Эксклюзивные из кейсов
+  dragon_fruit: "Драконий плод", starfruit: "Карамбола", moonberry: "Лунная ягода",
+  lucky_clover: "Клевер удачи", rainbow_corn: "Радужная кукуруза",
+};
+
+export const ITEM_EMOJIS: Record<string, string> = {
+  wheat: "🌾", carrot: "🥕", tomato: "🍅", corn: "🌽",
+  strawberry: "🍓", sunflower: "🌻", pumpkin: "🎃",
+  blueberry: "🫐", mushroom: "🍄", cactus_fruit: "🌵", dates: "🌴",
+  cranberry: "🍒", ice_root: "🌿",
+  egg: "🥚", milk: "🥛", wool: "🧶", meat: "🥩", honey: "🍯",
+  flour: "🌾", bread: "🍞", cheese: "🧀",
+  corn_starch: "🌽", berry_juice: "🍹", corn_bread: "🫓",
+  pumpkin_pie: "🥧", berry_jam: "🫙", mushroom_soup: "🍲", ice_cream: "🍦",
+  honey_yogurt: "🫙", bacon: "🥓", honey_bread: "🍯", roast: "🍖",
+  // Эксклюзивные из кейсов
+  dragon_fruit: "🐲", starfruit: "⭐", moonberry: "🌙",
+  lucky_clover: "🍀", rainbow_corn: "🌈",
+};
+
+export const SEASON_CONFIG: Record<string, { name: string; emoji: string; color: string; bgColor: string }> = {
+  spring: { name: "Весна",  emoji: "🌸", color: "text-pink-600",   bgColor: "bg-pink-100" },
+  summer: { name: "Лето",   emoji: "☀️", color: "text-yellow-600", bgColor: "bg-yellow-100" },
+  autumn: { name: "Осень",  emoji: "🍂", color: "text-orange-600", bgColor: "bg-orange-100" },
+  winter: { name: "Зима",   emoji: "❄️", color: "text-blue-600",   bgColor: "bg-blue-100" },
+};
+
+export const LEVEL_XP = [0, 100, 250, 500, 900, 1500, 2500, 4000, 6000, 10000, 15000];
+
+export function getLevelProgress(xp: number, level: number) {
+  const currentThreshold = LEVEL_XP[level - 1] ?? 0;
+  const nextThreshold = LEVEL_XP[level] ?? (currentThreshold + 5000);
+  const progress = Math.min(100, Math.max(0, ((xp - currentThreshold) / (nextThreshold - currentThreshold)) * 100));
+  return { progress, current: xp - currentThreshold, needed: nextThreshold - currentThreshold };
+}
+
+export function formatTime(seconds: number): string {
+  if (seconds < 60) return `${seconds}с`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}м`;
+  return `${Math.floor(seconds / 3600)}ч ${Math.floor((seconds % 3600) / 60)}м`;
+}
+
+export function formatCountdown(readyAt: string | null): string {
+  if (!readyAt) return "";
+  const remaining = Math.max(0, Math.floor((new Date(readyAt).getTime() - Date.now()) / 1000));
+  return formatTime(remaining);
+}

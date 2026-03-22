@@ -1100,7 +1100,14 @@ router.post("/:telegramId/action", async (req, res) => {
       if (!plot || plot.status !== "empty") return res.status(400).json({ error: "Грядка не пустая" });
       if ((seeds[cropType as keyof CropInventory] ?? 0) <= 0) return res.status(400).json({ error: "Нет семян" });
 
-      const cfg = getActiveCropConfig()[cropType];
+      // Look up crop config — also check active event crops
+      let cfg = getActiveCropConfig()[cropType];
+      if (!cfg && activeEvent?.isActive) {
+        const evCropDef = activeEvent.eventCrops.find((c) => c.id === cropType);
+        if (evCropDef) {
+          cfg = { growSec: evCropDef.growSec, seedCost: evCropDef.seedCostCoins, sellPrice: evCropDef.sellPrice, xp: evCropDef.xp, energyCost: 2, unlockLevel: 1 };
+        }
+      }
       if (!cfg) return res.status(400).json({ error: "Неизвестная культура" });
       if (energy < PLANT_ENERGY) return res.status(400).json({ error: `Нужно ${PLANT_ENERGY} энергии для посадки` });
 
@@ -1126,7 +1133,11 @@ router.post("/:telegramId/action", async (req, res) => {
         energy -= HARVEST_ENERGY;
         plots = plots.map((p) => p.id === plotId ? { ...p, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null, doubleHarvest: undefined } : p);
       } else {
-        const cfg = getActiveCropConfig()[plot.cropType];
+        let cfg = getActiveCropConfig()[plot.cropType];
+        if (!cfg && activeEvent?.isActive) {
+          const evCropDef = activeEvent.eventCrops.find((c) => c.id === plot.cropType);
+          if (evCropDef) cfg = { growSec: evCropDef.growSec, seedCost: evCropDef.seedCostCoins, sellPrice: evCropDef.sellPrice, xp: evCropDef.xp, energyCost: 2, unlockLevel: 1 };
+        }
         const sellMult = SEASON_SELL_MULTIPLIER[season] ?? 1;
         const extraDouble = worldCfg.doubleChanceBonus > 0 && Math.random() < worldCfg.doubleChanceBonus;
         const harvestQty = (plot.doubleHarvest || extraDouble) ? 2 : 1;
@@ -1158,7 +1169,11 @@ router.post("/:telegramId/action", async (req, res) => {
           harvestedIds.push(plot.id);
           continue;
         }
-        const cfg = getActiveCropConfig()[plot.cropType!];
+        let cfg = getActiveCropConfig()[plot.cropType!];
+        if (!cfg && activeEvent?.isActive) {
+          const evCropDef = activeEvent.eventCrops.find((c) => c.id === plot.cropType);
+          if (evCropDef) cfg = { growSec: evCropDef.growSec, seedCost: evCropDef.seedCostCoins, sellPrice: evCropDef.sellPrice, xp: evCropDef.xp, energyCost: 2, unlockLevel: 1 };
+        }
         const extraDouble = worldCfg.doubleChanceBonus > 0 && Math.random() < worldCfg.doubleChanceBonus;
         const harvestQty = (plot.doubleHarvest || extraDouble) ? 2 : 1;
         inventory[plot.cropType as keyof CropInventory] = (inventory[plot.cropType as keyof CropInventory] ?? 0) + harvestQty;
@@ -1869,6 +1884,8 @@ router.post("/:telegramId/action", async (req, res) => {
       quests, npcOrders, items, activeSprinklers,
       worlds, activeWorldId,
       eventCoins,
+      weatherType: currentWeather,
+      weatherUpdatedAt: new Date(),
       updatedAt: new Date(),
     }).where(eq(farmStateTable.telegramId, telegramId));
 

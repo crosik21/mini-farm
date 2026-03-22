@@ -37,12 +37,25 @@ export function PlantModal({ isOpen, onClose, plotId, farm }: PlantModalProps) {
   for (const [id, c] of Object.entries(EXCLUSIVE_CROPS)) {
     allCrops[id] = c;
   }
+  // Add active event crops — show only if player has seeds
+  if (farm.activeEvent?.isActive) {
+    for (const evCrop of farm.activeEvent.eventCrops) {
+      allCrops[evCrop.id] = {
+        id: evCrop.id, name: evCrop.name, emoji: evCrop.emoji,
+        seedCost: 0,
+        sellPrice: evCrop.sellPrice,
+        growTimeSec: evCrop.growSec,
+        unlockLevel: 1,
+        description: `Ивентовая культура · ${farm.activeEvent.eventCoinEmoji}`,
+      };
+    }
+  }
 
   const worldCropIds: string[] | null = activeWorldId !== "main"
     ? ((farm.worldConfig?.[activeWorldId]?.crops as string[]) ?? null)
     : null;
   const availableCrops = Object.values(allCrops).filter((c) => {
-    // Exclusive crops (seedCost=0): only show if player has seeds
+    // Exclusive crops (seedCost=0): only show if player has seeds (includes event crops)
     if (c.seedCost === 0) return ((farm.seeds as Record<string, number>)[c.id] ?? 0) > 0;
     return worldCropIds ? worldCropIds.includes(c.id) : c.unlockLevel <= farm.level;
   });

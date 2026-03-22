@@ -558,6 +558,7 @@ function FieldView({
   onHarvestAll,
   onOpenMap,
   onSwitchWorld,
+  onOpenEventShop,
 }: {
   farm: FarmData;
   onPlotTap: (plot: PlotState, rect: DOMRect) => void;
@@ -573,6 +574,7 @@ function FieldView({
   onHarvestAll: () => void;
   onOpenMap: () => void;
   onSwitchWorld: (worldId: WorldId) => void;
+  onOpenEventShop?: () => void;
 }) {
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [shopOpen, setShopOpen] = useState(false);
@@ -804,7 +806,7 @@ function FieldView({
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           className="mx-3 mb-1.5 flex items-center gap-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl shadow-md overflow-hidden cursor-pointer active:scale-95 transition-transform"
-          onClick={() => setShowEventShop(true)}
+          onClick={() => onOpenEventShop?.()}
         >
           <span className="text-lg px-2 py-2">{farm.activeEvent.emoji}</span>
           <div className="flex-1 py-2">
@@ -1218,7 +1220,8 @@ export default function FarmGame() {
                       onPlantDirect={handlePlantDirect} onUseItemDirect={handleUseItemDirect}
                       onHarvestAll={() => performAction({ action: "harvest_all" })}
                       onOpenMap={() => setMapOpen(true)}
-                      onSwitchWorld={(worldId) => performAction({ action: "switch_world", worldId })} />
+                      onSwitchWorld={(worldId) => performAction({ action: "switch_world", worldId })}
+                      onOpenEventShop={() => setShowEventShop(true)} />
                   </motion.div>
                 )}
                 {farmSection === "animals" && (
@@ -1374,7 +1377,7 @@ export default function FarmGame() {
                           {item.rewardGems && <div className="text-[10px] text-purple-600">+{item.rewardGems} 💎</div>}
                           {item.rewardSeedType && <div className="text-[10px] text-green-600">+{item.rewardSeedQty} семян</div>}
                         </div>
-                        <span className="font-black text-purple-700 text-sm">{item.cost} {farm.activeEvent.eventCoinEmoji}</span>
+                        <span className="font-black text-purple-700 text-sm">{item.cost} {farm.activeEvent?.eventCoinEmoji}</span>
                       </button>
                     ))}
                   </div>

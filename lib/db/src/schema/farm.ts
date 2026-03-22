@@ -33,6 +33,8 @@ export const farmStateTable = pgTable("farm_states", {
   lastLoginDate: text("last_login_date").notNull().default(""),
   streakRewardDay: integer("streak_reward_day").notNull().default(0),
   eventCoins: integer("event_coins").notNull().default(0),
+  weatherType: text("weather_type").notNull().default("sunny"),
+  weatherUpdatedAt: timestamp("weather_updated_at").notNull().defaultNow(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

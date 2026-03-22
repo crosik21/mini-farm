@@ -302,3 +302,25 @@ export function formatCountdown(readyAt: string | null): string {
   const remaining = Math.max(0, Math.floor((new Date(readyAt).getTime() - Date.now()) / 1000));
   return formatTime(remaining);
 }
+
+export interface SkinDef {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  bg1: string;
+  bg2: string;
+  priceCoin?: number;
+  priceGem?: number;
+  free?: boolean;
+}
+
+export const SKINS: SkinDef[] = [
+  { id: "default",  name: "Стандарт",       emoji: "🌿", description: "Классическое поле по сезону", bg1: "", bg2: "", free: true },
+  { id: "green",    name: "Зелёная долина",  emoji: "🍀", description: "Сочная зелёная трава круглый год", bg1: "#c8f0a0", bg2: "#84cc16", priceCoin: 800 },
+  { id: "desert",   name: "Пустыня",         emoji: "🏜️", description: "Знойные пески и жёлтый закат",    bg1: "#f5e6a0", bg2: "#e8a030", priceCoin: 1200 },
+  { id: "snow",     name: "Снежная ферма",   emoji: "❄️", description: "Зима круглый год — морозный воздух", bg1: "#dceeff", bg2: "#7eb8e8", priceCoin: 2000 },
+  { id: "tropical", name: "Тропики",         emoji: "🌴", description: "Яркие краски тропического острова", bg1: "#a0f0c8", bg2: "#06b6d4", priceGem: 40 },
+  { id: "night",    name: "Ночная ферма",    emoji: "🌙", description: "Звёздное небо над тихим полем",     bg1: "#2d3a5c", bg2: "#1a2040", priceGem: 60 },
+  { id: "golden",   name: "Золотая ферма",   emoji: "✨", description: "Легендарный золотой облик",          bg1: "#fff0a0", bg2: "#f59e0b", priceGem: 100 },
+];

@@ -300,6 +300,9 @@ export interface FarmData {
   toolTierConfig: Record<"watering_can" | "sprinkler", ToolTierDef[]>;
   farmPass: FarmPass | null;
   pets: PetsInventory;
+  activeSkin: string;
+  ownedSkins: string[];
+  totalPlaySeconds: number;
   updatedAt: string;
 }
 
@@ -390,4 +393,7 @@ export type FarmAction =
   | { action: "spend_event_coins"; itemId: string }
   | { action: "upgrade_tool"; toolType: "watering_can" | "sprinkler" }
   | { action: "buy_premium_pass" }
-  | { action: "claim_pass_reward"; passLevel: number; track: "free" | "premium" };
+  | { action: "claim_pass_reward"; passLevel: number; track: "free" | "premium" }
+  | { action: "buy_skin"; skinId: string }
+  | { action: "equip_skin"; skinId: string }
+  | { action: "record_playtime"; seconds: number };

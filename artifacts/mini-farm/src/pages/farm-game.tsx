@@ -23,6 +23,7 @@ import { FishingTab } from "@/components/game/FishingTab";
 import { MarketplaceTab } from "@/components/game/MarketplaceTab";
 import { FarmPassTab } from "@/components/game/FarmPassTab";
 import { OnboardingOverlay, useOnboarding } from "@/components/game/OnboardingOverlay";
+import { SKINS } from "@/lib/constants";
 import { Sprout, Cat, Factory } from "lucide-react";
 
 interface FloatingReward {
@@ -669,11 +670,13 @@ function FieldView({
   const season = SEASON_CONFIG[farm.season] || SEASON_CONFIG.spring;
   const style  = SEASON_STYLES[farm.season] || SEASON_STYLES.spring;
 
-  // World-specific background overrides for non-main worlds
+  // World-specific background overrides for non-main worlds; skin overrides for main world
   const worldId  = farm.activeWorldId ?? "main";
   const worldCfg = farm.worldConfig?.[worldId];
-  const bg1 = worldId !== "main" && worldCfg ? worldCfg.bg1 : style.bg1;
-  const bg2 = worldId !== "main" && worldCfg ? worldCfg.bg2 : style.bg2;
+  const activeSkinDef = SKINS.find((s) => s.id === (farm.activeSkin ?? "default"));
+  const hasSkinOverride = worldId === "main" && activeSkinDef && activeSkinDef.id !== "default" && activeSkinDef.bg1;
+  const bg1 = hasSkinOverride ? activeSkinDef!.bg1 : (worldId !== "main" && worldCfg ? worldCfg.bg1 : style.bg1);
+  const bg2 = hasSkinOverride ? activeSkinDef!.bg2 : (worldId !== "main" && worldCfg ? worldCfg.bg2 : style.bg2);
 
   const readyCount   = farm.plots.filter((p) => p.status === "ready").length;
   const growingCount = farm.plots.filter((p) => p.status === "growing").length;
@@ -1110,6 +1113,10 @@ export default function FarmGame() {
   const streakShownRef = useRef(false);
   const { showOnboarding, finishOnboarding } = useOnboarding();
 
+  // ── Playtime tracking refs (must be before early returns) ─────────────────
+  const sessionSecondsRef = useRef(0);
+  const lastTickRef = useRef(Date.now());
+
   // Show streak modal once on first load if there's a pending reward
   useEffect(() => {
     if (farm && !streakShownRef.current && farm.streakRewardDay > 0) {
@@ -1117,6 +1124,33 @@ export default function FarmGame() {
       setStreakModalOpen(true);
     }
   }, [farm]);
+
+  // Playtime tracking — send accumulated seconds every 30s or on page hide
+  useEffect(() => {
+    const tick = setInterval(() => {
+      const now = Date.now();
+      sessionSecondsRef.current += Math.round((now - lastTickRef.current) / 1000);
+      lastTickRef.current = now;
+      if (sessionSecondsRef.current >= 60) {
+        const toSend = Math.min(sessionSecondsRef.current, 600);
+        sessionSecondsRef.current = 0;
+        performAction({ action: "record_playtime", seconds: toSend });
+      }
+    }, 30_000);
+    const flush = () => {
+      const now = Date.now();
+      sessionSecondsRef.current += Math.round((now - lastTickRef.current) / 1000);
+      lastTickRef.current = now;
+      if (sessionSecondsRef.current >= 5) {
+        const toSend = Math.min(sessionSecondsRef.current, 600);
+        sessionSecondsRef.current = 0;
+        performAction({ action: "record_playtime", seconds: toSend });
+      }
+    };
+    const onVisibility = () => { if (document.visibilityState === "hidden") flush(); };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => { clearInterval(tick); document.removeEventListener("visibilitychange", onVisibility); };
+  }, []);
 
   // Telegram init is handled in App.tsx on mount — nothing to do here
 
@@ -1200,6 +1234,7 @@ export default function FarmGame() {
   const claimableAchievements = (farm.achievements ?? []).filter((a) => a.completed && !a.claimed).length;
   const profileBadge = claimableAchievements + (farm.streakRewardDay > 0 ? 1 : 0);
   const telegramId = farm.telegramId;
+
 
   return (
     <div

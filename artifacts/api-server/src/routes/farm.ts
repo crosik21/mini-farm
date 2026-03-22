@@ -2268,6 +2268,53 @@ router.post("/:telegramId/action", async (req, res) => {
       const farmPassCase = await getOrCreateFarmPass(telegramId);
       return res.json({ ...farmOut, caseResult, farmPass: serializeFarmPass(farmPassCase), achievements: buildAchievementsResponse(playerAchsCase) });
 
+    } else if (action === "buy_skin") {
+      const { skinId } = body;
+      const SKIN_DEFS: Record<string, { priceCoin?: number; priceGem?: number; free?: boolean }> = {
+        default:  { free: true },
+        green:    { priceCoin: 800 },
+        desert:   { priceCoin: 1200 },
+        snow:     { priceCoin: 2000 },
+        tropical: { priceGem: 40 },
+        night:    { priceGem: 60 },
+        golden:   { priceGem: 100 },
+      };
+      const skinDef = SKIN_DEFS[skinId];
+      if (!skinDef) return res.status(400).json({ error: "Скин не найден" });
+      const owned: string[] = (farm.ownedSkins as string[]) ?? [];
+      if (owned.includes(skinId) || skinDef.free) return res.status(400).json({ error: "Уже куплен" });
+      if (skinDef.priceCoin) {
+        if (coins < skinDef.priceCoin) return res.status(400).json({ error: "Недостаточно монет" });
+        coins -= skinDef.priceCoin;
+      } else if (skinDef.priceGem) {
+        if (gems < skinDef.priceGem) return res.status(400).json({ error: "Недостаточно кристаллов" });
+        gems -= skinDef.priceGem;
+      }
+      const newOwned = [...owned, skinId];
+      await db.update(farmStateTable).set({ coins, gems, ownedSkins: newOwned, activeSkin: skinId, updatedAt: new Date() })
+        .where(eq(farmStateTable.telegramId, telegramId));
+      const playerAchsBs = await getPlayerAchievements(telegramId);
+      const farmPassBs = await getOrCreateFarmPass(telegramId);
+      return res.json({ ...serializeFarm({ ...farm, coins, gems, ownedSkins: newOwned, activeSkin: skinId }, telegramId), farmPass: serializeFarmPass(farmPassBs), achievements: buildAchievementsResponse(playerAchsBs) });
+
+    } else if (action === "equip_skin") {
+      const { skinId } = body;
+      const owned: string[] = (farm.ownedSkins as string[]) ?? [];
+      if (skinId !== "default" && !owned.includes(skinId)) return res.status(400).json({ error: "Скин не куплен" });
+      await db.update(farmStateTable).set({ activeSkin: skinId, updatedAt: new Date() })
+        .where(eq(farmStateTable.telegramId, telegramId));
+      const playerAchsEs = await getPlayerAchievements(telegramId);
+      const farmPassEs = await getOrCreateFarmPass(telegramId);
+      return res.json({ ...serializeFarm({ ...farm, activeSkin: skinId }, telegramId), farmPass: serializeFarmPass(farmPassEs), achievements: buildAchievementsResponse(playerAchsEs) });
+
+    } else if (action === "record_playtime") {
+      const { seconds } = body;
+      if (typeof seconds !== "number" || seconds <= 0 || seconds > 600) return res.status(400).json({ error: "Invalid seconds" });
+      const newTotal = (farm.totalPlaySeconds ?? 0) + Math.floor(seconds);
+      await db.update(farmStateTable).set({ totalPlaySeconds: newTotal, updatedAt: new Date() })
+        .where(eq(farmStateTable.telegramId, telegramId));
+      return res.json({ ok: true, totalPlaySeconds: newTotal });
+
     } else {
       return res.status(400).json({ error: "Неизвестное действие" });
     }
@@ -2398,6 +2445,9 @@ function serializeFarm(farm: any, telegramId: string) {
     toolTiers: (farm.toolTiers as ToolTiers) || emptyToolTiers(),
     toolTierConfig: TOOL_TIER_CONFIG,
     pets: (farm.pets as PetsInventory) ?? { owned: [] },
+    activeSkin: (farm.activeSkin as string) ?? "default",
+    ownedSkins: (farm.ownedSkins as string[]) ?? [],
+    totalPlaySeconds: (farm.totalPlaySeconds as number) ?? 0,
     updatedAt: farm.updatedAt instanceof Date ? farm.updatedAt.toISOString() : farm.updatedAt,
   };
 }

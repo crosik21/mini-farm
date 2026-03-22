@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ShoppingBag, ClipboardList, Sprout } from "lucide-react";
+import { ShoppingBag, ClipboardList, Sprout, Palette } from "lucide-react";
 import { FarmData } from "@/lib/types";
 import { MarketTab } from "./MarketTab";
 import { QuestsTab } from "./QuestsTab";
 import { SeedShopTab } from "./SeedShopTab";
+import { SkinsTab } from "./SkinsTab";
 
-type ShopSection = "seeds" | "market" | "quests";
+type ShopSection = "seeds" | "market" | "quests" | "skins";
 
 interface ShopTabProps {
   farm: FarmData;
@@ -18,9 +19,10 @@ export function ShopTab({ farm }: ShopTabProps) {
   const claimable = farm.quests.filter((q) => q.completed && !q.claimed).length;
 
   const tabs: { id: ShopSection; label: string; icon: React.ReactNode; badge?: number }[] = [
-    { id: "seeds",  label: "Семена", icon: <Sprout size={15} /> },
-    { id: "market", label: "НПС",    icon: <ShoppingBag size={15} /> },
+    { id: "seeds",  label: "Семена",  icon: <Sprout size={15} /> },
+    { id: "market", label: "НПС",     icon: <ShoppingBag size={15} /> },
     { id: "quests", label: "Задания", icon: <ClipboardList size={15} />, badge: claimable },
+    { id: "skins",  label: "Скины",   icon: <Palette size={15} /> },
   ];
 
   return (
@@ -92,6 +94,17 @@ export function ShopTab({ farm }: ShopTabProps) {
             transition={{ duration: 0.18 }}
           >
             <QuestsTab farm={farm} />
+          </motion.div>
+        )}
+        {section === "skins" && (
+          <motion.div
+            key="skins"
+            initial={{ opacity: 0, x: 16 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -16 }}
+            transition={{ duration: 0.18 }}
+          >
+            <SkinsTab farm={farm} />
           </motion.div>
         )}
       </AnimatePresence>

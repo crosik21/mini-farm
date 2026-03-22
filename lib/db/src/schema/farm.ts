@@ -38,6 +38,9 @@ export const farmStateTable = pgTable("farm_states", {
   fishInventory: jsonb("fish_inventory").$type<Record<string, number>>(),
   toolTiers: jsonb("tool_tiers").$type<ToolTiers>(),
   pets: jsonb("pets").$type<PetsInventory>(),
+  activeSkin: text("active_skin").default("default"),
+  ownedSkins: jsonb("owned_skins").$type<string[]>(),
+  totalPlaySeconds: integer("total_play_seconds").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

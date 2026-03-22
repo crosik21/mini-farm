@@ -25,6 +25,7 @@ export interface BuildingConfig {
   emoji: string;
   cost: number;
   unlockLevel: number;
+  shelter?: boolean;
 }
 
 export interface RecipeConfig {
@@ -66,6 +67,7 @@ export const ANIMALS: Record<string, AnimalConfig> = {
 };
 
 export const BUILDINGS: Record<string, BuildingConfig> = {
+  barn:    { type: "barn",    name: "Амбар",        emoji: "🏚️", cost: 150, unlockLevel: 1, shelter: true },
   mill:    { type: "mill",    name: "Мельница",     emoji: "⚙️",  cost: 300, unlockLevel: 3 },
   bakery:  { type: "bakery",  name: "Пекарня",      emoji: "🍞",  cost: 600, unlockLevel: 5 },
   kitchen: { type: "kitchen", name: "Кухня",        emoji: "🍳",  cost: 900, unlockLevel: 6 },

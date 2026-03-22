@@ -1142,16 +1142,18 @@ router.post("/:telegramId/action", async (req, res) => {
         energy -= HARVEST_ENERGY;
         plots = plots.map((p) => p.id === plotId ? { ...p, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null, doubleHarvest: undefined } : p);
       } else {
+        // Potent path: storm-surviving crops yield +50% XP bonus
         let cfg = getActiveCropConfig()[plot.cropType];
         if (!cfg && activeEvent?.isActive) {
           const evCropDef = activeEvent.eventCrops.find((c) => c.id === plot.cropType);
           if (evCropDef) cfg = { growSec: evCropDef.growSec, seedCost: evCropDef.seedCostCoins, sellPrice: evCropDef.sellPrice, xp: evCropDef.xp, energyCost: 2, unlockLevel: 1 };
         }
         const sellMult = SEASON_SELL_MULTIPLIER[season] ?? 1;
+        const potentXpMult = currentWeather === "storm" ? 1.5 : 1;
         const extraDouble = worldCfg.doubleChanceBonus > 0 && Math.random() < worldCfg.doubleChanceBonus;
         const harvestQty = (plot.doubleHarvest || extraDouble) ? 2 : 1;
         inventory[plot.cropType as keyof CropInventory] = (inventory[plot.cropType as keyof CropInventory] ?? 0) + harvestQty;
-        xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier);
+        xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier * potentXpMult);
         energy -= HARVEST_ENERGY;
         plots = plots.map((p) => p.id === plotId ? { ...p, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null, doubleHarvest: undefined } : p);
         quests = updateQuestProgress(quests, "harvest", plot.cropType, harvestQty);
@@ -1170,6 +1172,7 @@ router.post("/:telegramId/action", async (req, res) => {
       const sellMult = SEASON_SELL_MULTIPLIER[season] ?? 1;
       const harvestedIds: number[] = [];
       let totalHarvested = 0;
+      const potentXpMult = currentWeather === "storm" ? 1.5 : 1;
       for (const plot of readyPlots) {
         if (energy < HARVEST_ENERGY) break;
         energy -= HARVEST_ENERGY;
@@ -1179,6 +1182,7 @@ router.post("/:telegramId/action", async (req, res) => {
           harvestedIds.push(plot.id);
           continue;
         }
+        // Potent path: storm-surviving crops yield +50% XP
         let cfg = getActiveCropConfig()[plot.cropType!];
         if (!cfg && activeEvent?.isActive) {
           const evCropDef = activeEvent.eventCrops.find((c) => c.id === plot.cropType);
@@ -1187,7 +1191,7 @@ router.post("/:telegramId/action", async (req, res) => {
         const extraDouble = worldCfg.doubleChanceBonus > 0 && Math.random() < worldCfg.doubleChanceBonus;
         const harvestQty = (plot.doubleHarvest || extraDouble) ? 2 : 1;
         inventory[plot.cropType as keyof CropInventory] = (inventory[plot.cropType as keyof CropInventory] ?? 0) + harvestQty;
-        xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier);
+        xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier * potentXpMult);
         quests = updateQuestProgress(quests, "harvest", plot.cropType!, harvestQty);
         harvestedIds.push(plot.id);
         totalHarvested += harvestQty;

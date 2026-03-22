@@ -311,12 +311,40 @@ export function IsometricField({
       {/* depth highlight */}
       <rect x={0} y={fieldH} width={fieldW} height={1} fill="rgba(255,255,255,0.08)" />
 
-      {/* ── Weather overlay ── */}
+      {/* ── Weather animated overlay ── */}
       {weather === "rainy" && (
-        <rect x={0} y={0} width={svgW} height={svgH} fill="rgba(100,150,220,0.10)" pointerEvents="none" />
+        <g pointerEvents="none">
+          <rect x={0} y={0} width={svgW} height={svgH} fill="rgba(100,150,220,0.10)">
+            <animate attributeName="opacity" values="0.7;1;0.7" dur="2s" repeatCount="indefinite" />
+          </rect>
+          {/* Animated rain streaks */}
+          {Array.from({ length: 12 }, (_, i) => {
+            const rx = (i * 37 + 11) % svgW;
+            const ry = (i * 53) % svgH;
+            return (
+              <line key={i} x1={rx} y1={ry} x2={rx + 4} y2={ry + 10} stroke="rgba(150,200,255,0.5)" strokeWidth={1.5}>
+                <animateTransform attributeName="transform" type="translate" from={`0 -${svgH}`} to={`0 ${svgH}`} dur={`${1.2 + (i % 4) * 0.25}s`} begin={`${(i * 0.15) % 1.2}s`} repeatCount="indefinite" />
+              </line>
+            );
+          })}
+        </g>
       )}
       {weather === "storm" && (
-        <rect x={0} y={0} width={svgW} height={svgH} fill="rgba(60,60,100,0.18)" pointerEvents="none" />
+        <g pointerEvents="none">
+          <rect x={0} y={0} width={svgW} height={svgH} fill="rgba(40,40,80,0.22)">
+            <animate attributeName="opacity" values="0.7;1;0.85;1;0.7" dur="1.5s" repeatCount="indefinite" />
+          </rect>
+          {/* Heavy rain streaks */}
+          {Array.from({ length: 18 }, (_, i) => {
+            const rx = (i * 31 + 7) % svgW;
+            const ry = (i * 47) % svgH;
+            return (
+              <line key={i} x1={rx} y1={ry} x2={rx + 5} y2={ry + 14} stroke="rgba(180,200,255,0.45)" strokeWidth={2}>
+                <animateTransform attributeName="transform" type="translate" from={`0 -${svgH}`} to={`0 ${svgH}`} dur={`${0.8 + (i % 4) * 0.18}s`} begin={`${(i * 0.1) % 0.8}s`} repeatCount="indefinite" />
+              </line>
+            );
+          })}
+        </g>
       )}
 
       </g>

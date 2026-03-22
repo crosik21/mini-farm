@@ -216,10 +216,14 @@ export function BuildingsTab({ farm }: BuildingsTabProps) {
                       <EmojiImg emoji={cfg.emoji} size={36} />
                       <div className="flex-1 text-left">
                         <div className="font-bold text-sm">{cfg.name}</div>
-                        <div className="text-[10px] text-muted-foreground">
-                          {buildingRecipes.slice(0, 3).map((r) => ITEM_EMOJIS[r.outputId]).join(" ")}
-                          {buildingRecipes.length > 3 && ` +${buildingRecipes.length - 3}`}
-                        </div>
+                        {cfg.shelter ? (
+                          <div className="text-[10px] text-blue-600">☔ Защита от бури (−10% потерь)</div>
+                        ) : (
+                          <div className="text-[10px] text-muted-foreground">
+                            {buildingRecipes.slice(0, 3).map((r) => ITEM_EMOJIS[r.outputId]).join(" ")}
+                            {buildingRecipes.length > 3 && ` +${buildingRecipes.length - 3}`}
+                          </div>
+                        )}
                         <div className="text-xs text-amber-600 font-bold mt-0.5">🪙 {cfg.cost}</div>
                       </div>
                       {!canAfford && <span className="text-[10px] text-red-500 font-bold">Нет монет</span>}
@@ -236,7 +240,7 @@ export function BuildingsTab({ farm }: BuildingsTabProps) {
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="text-6xl mb-4 opacity-40">🏭</div>
           <h3 className="font-display font-bold text-xl mb-2">Нет зданий</h3>
-          <p className="text-muted-foreground text-sm mb-4">Постройте мельницу, пекарню, кухню или молочный цех.</p>
+          <p className="text-muted-foreground text-sm mb-4">Постройте амбар для защиты от бурь или производственные здания.</p>
           {farm.level < 3 && (
             <div className="text-xs bg-amber-100 text-amber-700 rounded-xl px-4 py-2">
               🔒 Мельница откроется на 3 уровне

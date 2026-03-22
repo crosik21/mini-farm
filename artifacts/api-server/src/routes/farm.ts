@@ -685,16 +685,25 @@ export const ACHIEVEMENT_DEFS: AchievementDef[] = [
   { id: "level_5",       emoji: "🌟", title: "Опытный",            description: "Достигни 5 уровня",         goal: 5,    category: "level",     trackAction: "level_up", rewardCoins: 200, rewardGems: 1 },
   { id: "level_7",       emoji: "✨", title: "Ветеран",            description: "Достигни 7 уровня",         goal: 7,    category: "level",     trackAction: "level_up", rewardCoins: 300, rewardGems: 2 },
   { id: "level_10",      emoji: "👑", title: "Великий фермер",    description: "Достигни 10 уровня",        goal: 10,   category: "level",     trackAction: "level_up", rewardCoins: 500, rewardGems: 5 },
+  // ── Торговля ────────────────────────────────────────────────────────────────
+  { id: "sell_10",       emoji: "🛒", title: "Продавец",           description: "Продай 10 товаров",          goal: 10,   category: "trading",   trackAction: "sell_item", rewardCoins: 80,   rewardGems: 0 },
+  { id: "sell_50",       emoji: "🏪", title: "Торговец",           description: "Продай 50 товаров",          goal: 50,   category: "trading",   trackAction: "sell_item", rewardCoins: 200,  rewardGems: 1, rewardSeedType: "corn",       rewardSeedQty: 3 },
+  { id: "sell_200",      emoji: "💹", title: "Биржевой магнат",    description: "Продай 200 товаров",         goal: 200,  category: "trading",   trackAction: "sell_item", rewardCoins: 600,  rewardGems: 3, rewardSeedType: "strawberry", rewardSeedQty: 5 },
+  { id: "npc_orders_5",  emoji: "📦", title: "Надёжный поставщик", description: "Выполни 5 заказов НПС",      goal: 5,    category: "trading",   trackAction: "npc_order", rewardCoins: 150,  rewardGems: 1 },
+  { id: "npc_orders_20", emoji: "🚚", title: "Логистик",           description: "Выполни 20 заказов НПС",     goal: 20,   category: "trading",   trackAction: "npc_order", rewardCoins: 400,  rewardGems: 2, rewardSeedType: "sunflower",  rewardSeedQty: 3 },
   // ── Квесты ──────────────────────────────────────────────────────────────────
   { id: "quests_5",      emoji: "📋", title: "Добросовестный",    description: "Выполни 5 заданий",         goal: 5,    category: "quests",    trackAction: "claim_quest", rewardCoins: 100, rewardGems: 0 },
   { id: "quests_20",     emoji: "📜", title: "Исполнитель",       description: "Выполни 20 заданий",        goal: 20,   category: "quests",    trackAction: "claim_quest", rewardCoins: 250, rewardGems: 2 },
   // ── Стрик ───────────────────────────────────────────────────────────────────
   { id: "streak_3",      emoji: "🔥", title: "На волне",          description: "3 дня подряд входи в игру", goal: 3,    category: "streak",    trackAction: "login_streak", rewardCoins: 100, rewardGems: 0 },
-  { id: "streak_7",      emoji: "🔥", title: "Недельный стрик",   description: "7 дней подряд входи в игру",goal: 7,    category: "streak",    trackAction: "login_streak", rewardCoins: 250, rewardGems: 2 },
+  { id: "streak_7",      emoji: "🔥", title: "Недельный стрик",   description: "7 дней подряд входи в игру",goal: 7,    category: "streak",    trackAction: "login_streak", rewardCoins: 250, rewardGems: 2, rewardSeedType: "pumpkin", rewardSeedQty: 2 },
   // ── Миры ────────────────────────────────────────────────────────────────────
   { id: "unlock_world",  emoji: "🌍", title: "Путешественник",    description: "Разблокируй другой мир",    goal: 1,    category: "worlds",    trackAction: "unlock_world", rewardCoins: 200, rewardGems: 1 },
   // ── Крафт ───────────────────────────────────────────────────────────────────
-  { id: "craft_5",       emoji: "⚙️", title: "Ремесленник",       description: "Соберй 5 крафт-предметов",  goal: 5,    category: "crafting",  trackAction: "collect_craft", rewardCoins: 150, rewardGems: 1 },
+  { id: "craft_5",       emoji: "⚙️", title: "Ремесленник",       description: "Собери 5 крафт-предметов",  goal: 5,    category: "crafting",  trackAction: "collect_craft", rewardCoins: 150, rewardGems: 1 },
+  { id: "craft_20",      emoji: "🔧", title: "Мастер крафта",     description: "Собери 20 крафт-предметов", goal: 20,   category: "crafting",  trackAction: "collect_craft", rewardCoins: 350, rewardGems: 2, rewardSeedType: "sunflower", rewardSeedQty: 2 },
+  // ── Урожай (расширенные) ────────────────────────────────────────────────────
+  { id: "harvest_first", emoji: "🌱", title: "Первый росток",     description: "Собери 1 урожай",           goal: 1,    category: "harvest",   trackAction: "harvest", rewardCoins: 20,  rewardGems: 0, rewardSeedType: "carrot", rewardSeedQty: 3 },
 ];
 
 async function getPlayerAchievements(telegramId: string): Promise<Achievement[]> {
@@ -1229,6 +1238,7 @@ router.post("/:telegramId/action", async (req, res) => {
       quests = updateQuestProgress(quests, "sell_crops", cropType, quantity);
       quests = updateQuestProgress(quests, "sell_any", "coins", earned);
       await updateAchievementProgress(telegramId, "earn_coins", earned);
+      await updateAchievementProgress(telegramId, "sell_item", quantity);
 
     // ── BUY ANIMAL ─────────────────────────────────────────────────────────────
     } else if (action === "buy_animal") {
@@ -1345,12 +1355,15 @@ router.post("/:telegramId/action", async (req, res) => {
       products[productKey] -= quantity;
       quests = updateQuestProgress(quests, "sell_product", cropType, quantity);
       quests = updateQuestProgress(quests, "sell_any", "coins", earned);
+      await updateAchievementProgress(telegramId, "earn_coins", earned);
+      await updateAchievementProgress(telegramId, "sell_item", quantity);
 
     // ── SELL ALL ───────────────────────────────────────────────────────────────
     } else if (action === "sell_all") {
       const sellMult = SEASON_SELL_MULTIPLIER[season] ?? 1;
       const activeCfg = getActiveCropConfig();
       let totalEarned = 0;
+      let totalSoldQty = 0;
 
       for (const [cropId, qty] of Object.entries(inventory)) {
         const n = (qty as number) ?? 0;
@@ -1360,6 +1373,7 @@ router.post("/:telegramId/action", async (req, res) => {
         const earned = Math.floor(cfg.sellPrice * sellMult) * n;
         coins += earned;
         totalEarned += earned;
+        totalSoldQty += n;
         (inventory as Record<string, number>)[cropId] = 0;
         quests = updateQuestProgress(quests, "sell_crops", cropId, n);
         quests = updateQuestProgress(quests, "sell_any", "coins", earned);
@@ -1372,12 +1386,16 @@ router.post("/:telegramId/action", async (req, res) => {
         const earned = Math.floor(price * sellMult) * n;
         coins += earned;
         totalEarned += earned;
+        totalSoldQty += n;
         (products as Record<string, number>)[prodId] = 0;
         quests = updateQuestProgress(quests, "sell_product", prodId, n);
         quests = updateQuestProgress(quests, "sell_any", "coins", earned);
       }
 
       if (totalEarned === 0) return res.status(400).json({ error: "Амбар уже пуст!" });
+
+      await updateAchievementProgress(telegramId, "earn_coins", totalEarned);
+      if (totalSoldQty > 0) await updateAchievementProgress(telegramId, "sell_item", totalSoldQty);
 
     // ── REDEEM PROMO CODE ──────────────────────────────────────────────────────
     } else if (action === "redeem_promo") {
@@ -1478,6 +1496,8 @@ router.post("/:telegramId/action", async (req, res) => {
       coins += order.reward.coins;
       xp += order.reward.xp;
       npcOrders[orderIdx] = { ...order, completed: true };
+      await updateAchievementProgress(telegramId, "npc_order", 1);
+      await updateAchievementProgress(telegramId, "earn_coins", order.reward.coins);
 
       if (npcOrders.every((o) => o.completed)) {
         npcOrders = generateNpcOrders(getLevelFromXp(xp));
@@ -1595,6 +1615,17 @@ router.post("/:telegramId/action", async (req, res) => {
       const reward = STREAK_REWARDS.find((r) => r.day === streakDay);
       if (!reward) return res.status(400).json({ error: "Неизвестная награда стрика" });
 
+      // Atomic claim: only update if streakRewardDay is still > 0 (prevents double-claim)
+      const claimResult = await db
+        .update(farmStateTable)
+        .set({ streakRewardDay: 0, updatedAt: new Date() })
+        .where(and(eq(farmStateTable.telegramId, telegramId), sql`"streak_reward_day" > 0`))
+        .returning({ id: farmStateTable.telegramId });
+
+      if (claimResult.length === 0) {
+        return res.status(409).json({ error: "Награда уже была получена" });
+      }
+
       // Apply reward
       const applied = applyStreakReward({ ...farm, coins, gems, seeds, animals }, reward);
       coins = applied.coins;
@@ -1602,13 +1633,7 @@ router.post("/:telegramId/action", async (req, res) => {
       Object.assign(seeds, applied.seeds);
       animals = applied.animals;
 
-      // Reset streakRewardDay so it can't be claimed again today
-      await db.update(farmStateTable).set({
-        streakRewardDay: 0,
-        updatedAt: new Date(),
-      }).where(eq(farmStateTable.telegramId, telegramId));
-
-      // Save the full state now and return
+      // Save the full state
       const level = getLevelFromXp(xp);
       if (level > farm.level) maxEnergy = Math.min(60, 30 + level * 2);
       worlds[activeWorldId] = { ...(worlds[activeWorldId] || { unlocked: true }), plots };
@@ -1632,25 +1657,45 @@ router.post("/:telegramId/action", async (req, res) => {
       const def = ACHIEVEMENT_DEFS.find((d) => d.id === achievementId);
       if (!def) return res.status(400).json({ error: "Неизвестное достижение" });
 
-      const [existing] = await db
-        .select()
-        .from(achievementsTable)
-        .where(and(eq(achievementsTable.telegramId, telegramId), eq(achievementsTable.achievementId, achievementId)));
+      // Atomic claim using conditional UPDATE (claimed = 0 → 1) — prevents double-claim
+      const achResult = await db.transaction(async (tx) => {
+        const [existing] = await tx
+          .select()
+          .from(achievementsTable)
+          .where(and(eq(achievementsTable.telegramId, telegramId), eq(achievementsTable.achievementId, achievementId)));
 
-      const progress = existing?.progress ?? 0;
-      if (progress < def.goal) return res.status(400).json({ error: "Достижение ещё не выполнено" });
-      if (existing?.claimed) return res.status(400).json({ error: "Награда уже получена" });
+        if (!existing) {
+          // Achievement progress not recorded at all — can't claim
+          return { status: "not_found" as const };
+        }
+        if (existing.progress < def.goal) {
+          return { status: "not_completed" as const };
+        }
+        if (existing.claimed === 1) {
+          return { status: "already_claimed" as const };
+        }
+
+        // Atomically mark as claimed (WHERE claimed = 0 guards concurrent requests)
+        const updated = await tx
+          .update(achievementsTable)
+          .set({ claimed: 1, claimedAt: new Date(), updatedAt: new Date() })
+          .where(and(eq(achievementsTable.id, existing.id), eq(achievementsTable.claimed, 0)))
+          .returning({ id: achievementsTable.id });
+
+        if (updated.length === 0) {
+          return { status: "already_claimed" as const };
+        }
+        return { status: "ok" as const };
+      });
+
+      if (achResult.status === "not_found") return res.status(400).json({ error: "Достижение ещё не выполнено" });
+      if (achResult.status === "not_completed") return res.status(400).json({ error: "Достижение ещё не выполнено" });
+      if (achResult.status === "already_claimed") return res.status(409).json({ error: "Награда уже получена" });
 
       coins += def.rewardCoins;
       gems += def.rewardGems;
       if (def.rewardSeedType && def.rewardSeedQty) {
         seeds[def.rewardSeedType as keyof CropInventory] = ((seeds[def.rewardSeedType as keyof CropInventory] as number) ?? 0) + def.rewardSeedQty;
-      }
-
-      if (existing) {
-        await db.update(achievementsTable).set({ claimed: 1, claimedAt: new Date(), updatedAt: new Date() }).where(eq(achievementsTable.id, existing.id));
-      } else {
-        await db.insert(achievementsTable).values({ telegramId, achievementId, progress: def.goal, claimed: 1, claimedAt: new Date() });
       }
 
       const level = getLevelFromXp(xp);

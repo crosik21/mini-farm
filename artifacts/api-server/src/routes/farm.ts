@@ -714,77 +714,38 @@ async function updateAchievementProgress(telegramId: string, trackAction: string
   const defs = ACHIEVEMENT_DEFS.filter((d) => d.trackAction === trackAction);
   if (defs.length === 0) return;
 
-  const existing = await db
-    .select()
-    .from(achievementsTable)
-    .where(
-      and(
-        eq(achievementsTable.telegramId, telegramId),
-        inArray(achievementsTable.achievementId, defs.map((d) => d.id))
-      )
-    );
-
-  const existingMap = new Map(existing.map((e) => [e.achievementId, e]));
-
-  for (const def of defs) {
-    const current = existingMap.get(def.id);
-    if (current) {
-      if (current.claimed) continue;
-      const newProgress = Math.min(def.goal, current.progress + amount);
-      if (newProgress !== current.progress) {
-        await db
-          .update(achievementsTable)
-          .set({ progress: newProgress, updatedAt: new Date() })
-          .where(eq(achievementsTable.id, current.id));
-      }
-    } else {
-      const newProgress = Math.min(def.goal, amount);
-      await db.insert(achievementsTable).values({
-        telegramId,
-        achievementId: def.id,
-        progress: newProgress,
-        claimed: 0,
-      });
-    }
-  }
+  // Atomic upsert — no separate read, no race condition
+  // ON CONFLICT DO UPDATE advances progress (capped at goal) only when not yet claimed
+  await Promise.all(defs.map((def) =>
+    db.insert(achievementsTable)
+      .values({ telegramId, achievementId: def.id, progress: Math.min(def.goal, amount), claimed: 0 })
+      .onConflictDoUpdate({
+        target: [achievementsTable.telegramId, achievementsTable.achievementId],
+        set: {
+          progress: sql`CASE WHEN ${achievementsTable.claimed} = 0 THEN LEAST(${def.goal}, ${achievementsTable.progress} + ${amount}) ELSE ${achievementsTable.progress} END`,
+          updatedAt: sql`CASE WHEN ${achievementsTable.claimed} = 0 THEN now() ELSE ${achievementsTable.updatedAt} END`,
+        },
+      })
+  ));
 }
 
 async function setAchievementAbsolute(telegramId: string, trackAction: string, absoluteValue: number): Promise<void> {
   const defs = ACHIEVEMENT_DEFS.filter((d) => d.trackAction === trackAction);
   if (defs.length === 0) return;
 
-  const existing = await db
-    .select()
-    .from(achievementsTable)
-    .where(
-      and(
-        eq(achievementsTable.telegramId, telegramId),
-        inArray(achievementsTable.achievementId, defs.map((d) => d.id))
-      )
-    );
-
-  const existingMap = new Map(existing.map((e) => [e.achievementId, e]));
-
-  for (const def of defs) {
-    const current = existingMap.get(def.id);
-    const newProgress = Math.min(def.goal, absoluteValue);
-    if (current) {
-      if (current.claimed) continue;
-      if (newProgress !== current.progress) {
-        await db
-          .update(achievementsTable)
-          .set({ progress: newProgress, updatedAt: new Date() })
-          .where(eq(achievementsTable.id, current.id));
-      }
-    } else {
-      await db.insert(achievementsTable).values({
-        telegramId,
-        achievementId: def.id,
-        progress: newProgress,
-        claimed: 0,
+  // Atomic upsert — set progress to the higher of current or absoluteValue (only when not claimed)
+  await Promise.all(defs.map((def) => {
+    const capped = Math.min(def.goal, absoluteValue);
+    return db.insert(achievementsTable)
+      .values({ telegramId, achievementId: def.id, progress: capped, claimed: 0 })
+      .onConflictDoUpdate({
+        target: [achievementsTable.telegramId, achievementsTable.achievementId],
+        set: {
+          progress: sql`CASE WHEN ${achievementsTable.claimed} = 0 THEN GREATEST(${achievementsTable.progress}, ${capped}) ELSE ${achievementsTable.progress} END`,
+          updatedAt: sql`CASE WHEN ${achievementsTable.claimed} = 0 THEN now() ELSE ${achievementsTable.updatedAt} END`,
+        },
       });
-    }
-  }
+  }));
 }
 
 // ─────────────────────────────── Helper Functions ─────────────────────────────

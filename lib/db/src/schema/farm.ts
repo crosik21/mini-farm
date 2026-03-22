@@ -1,4 +1,4 @@
-import { pgTable, text, integer, jsonb, timestamp, serial } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, jsonb, timestamp, serial, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -257,6 +257,8 @@ export const achievementsTable = pgTable("achievements", {
   claimedAt: timestamp("claimed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  uniqueAch: uniqueIndex("achievements_telegram_achievement_unique").on(table.telegramId, table.achievementId),
+}));
 
 export type Achievement = typeof achievementsTable.$inferSelect;

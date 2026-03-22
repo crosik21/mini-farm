@@ -95,6 +95,7 @@ export function ProfileTab({ farm }: { farm: FarmData }) {
   const [promoCode, setPromoCode] = useState("");
   const { mutate: farmMutate, isPending: promoLoading } = useFarmAction();
   const { mutate: claimAch, isPending: claimingAch } = useFarmAction();
+  const { mutate: claimStreak, isPending: claimingStreak } = useFarmAction();
 
   const completedQuests = farm.quests.filter((q) => q.claimed).length;
   const totalQuests = farm.quests.length;
@@ -444,10 +445,23 @@ export function ProfileTab({ farm }: { farm: FarmData }) {
                 })}
               </div>
             </div>
-            <div className="text-center">
-              <div className="text-xs text-orange-600 dark:text-orange-400 font-bold">Следующая</div>
-              <div className="text-xs text-muted-foreground">Зайди завтра!</div>
-            </div>
+            {farm.streakRewardDay > 0 ? (
+              <button
+                onClick={() => claimStreak({ action: "claim_streak_reward" }, {
+                  onSuccess: () => toast({ title: "🔥 Награда за стрик получена!" }),
+                  onError: () => toast({ title: "Ошибка получения награды", variant: "destructive" }),
+                })}
+                disabled={claimingStreak}
+                className="bg-gradient-to-r from-orange-500 to-amber-500 text-white text-xs font-black px-3 py-2 rounded-xl shadow active:scale-95 transition-transform disabled:opacity-60"
+              >
+                {claimingStreak ? "..." : "🎁 Получить"}
+              </button>
+            ) : (
+              <div className="text-center">
+                <div className="text-xs text-orange-600 dark:text-orange-400 font-bold">Следующая</div>
+                <div className="text-xs text-muted-foreground">Зайди завтра!</div>
+              </div>
+            )}
           </div>
         </motion.div>
       )}

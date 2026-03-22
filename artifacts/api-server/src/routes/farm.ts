@@ -1576,36 +1576,38 @@ router.post("/:telegramId/action", async (req, res) => {
       const reward = STREAK_REWARDS.find((r) => r.day === streakDay);
       if (!reward) return res.status(400).json({ error: "Неизвестная награда стрика" });
 
-      // Atomic claim: only update if streakRewardDay is still > 0 (prevents double-claim)
-      const claimResult = await db
-        .update(farmStateTable)
-        .set({ streakRewardDay: 0, updatedAt: new Date() })
-        .where(and(eq(farmStateTable.telegramId, telegramId), sql`"streak_reward_day" > 0`))
-        .returning({ id: farmStateTable.telegramId });
-
-      if (claimResult.length === 0) {
-        return res.status(409).json({ error: "Награда уже была получена" });
-      }
-
-      // Apply reward
+      // Apply reward amounts (compute before transaction)
       const applied = applyStreakReward({ ...farm, coins, gems, seeds, animals }, reward);
       coins = applied.coins;
       gems = applied.gems;
       Object.assign(seeds, applied.seeds);
       animals = applied.animals;
 
-      // Save the full state
       const level = getLevelFromXp(xp);
       if (level > farm.level) maxEnergy = Math.min(60, 30 + level * 2);
       worlds[activeWorldId] = { ...(worlds[activeWorldId] || { unlocked: true }), plots };
-      await db.update(farmStateTable).set({
-        plots, coins, gems, xp, level, energy, maxEnergy,
-        animals, buildings, products, inventory, seeds,
-        quests, npcOrders, items, activeSprinklers,
-        worlds, activeWorldId,
-        streakRewardDay: 0,
-        updatedAt: new Date(),
-      }).where(eq(farmStateTable.telegramId, telegramId));
+
+      // Single atomic transaction: claim flag + full reward state in one commit
+      const streakClaimResult = await db.transaction(async (tx) => {
+        const claimed = await tx
+          .update(farmStateTable)
+          .set({
+            plots, coins, gems, xp, level, energy, maxEnergy,
+            animals, buildings, products, inventory, seeds,
+            quests, npcOrders, items, activeSprinklers,
+            worlds, activeWorldId,
+            streakRewardDay: 0,
+            updatedAt: new Date(),
+          })
+          .where(and(eq(farmStateTable.telegramId, telegramId), sql`"streak_reward_day" > 0`))
+          .returning({ id: farmStateTable.telegramId });
+        return claimed;
+      });
+
+      if (streakClaimResult.length === 0) {
+        return res.status(409).json({ error: "Награда уже была получена" });
+      }
+
       const farmOutStreak = serializeFarm({ ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, streakRewardDay: 0, loginStreak: farm.loginStreak, lastLoginDate: farm.lastLoginDate }, telegramId);
       const playerAchsStreak = await getPlayerAchievements(telegramId);
       return res.json({ ...farmOutStreak, achievements: buildAchievementsResponse(playerAchsStreak) });
@@ -1618,23 +1620,27 @@ router.post("/:telegramId/action", async (req, res) => {
       const def = ACHIEVEMENT_DEFS.find((d) => d.id === achievementId);
       if (!def) return res.status(400).json({ error: "Неизвестное достижение" });
 
-      // Atomic claim using conditional UPDATE (claimed = 0 → 1) — prevents double-claim
+      // Compute rewards before the transaction (needed in SET clause)
+      const newCoinsAch = coins + def.rewardCoins;
+      const newGemsAch = gems + def.rewardGems;
+      const newSeedsAch = { ...seeds };
+      if (def.rewardSeedType && def.rewardSeedQty) {
+        newSeedsAch[def.rewardSeedType as keyof CropInventory] = ((newSeedsAch[def.rewardSeedType as keyof CropInventory] as number) ?? 0) + def.rewardSeedQty;
+      }
+      const levelAch = getLevelFromXp(xp);
+      if (levelAch > farm.level) maxEnergy = Math.min(60, 30 + levelAch * 2);
+      worlds[activeWorldId] = { ...(worlds[activeWorldId] || { unlocked: true }), plots };
+
+      // Single transaction: mark achievement claimed AND credit farm rewards atomically
       const achResult = await db.transaction(async (tx) => {
         const [existing] = await tx
           .select()
           .from(achievementsTable)
           .where(and(eq(achievementsTable.telegramId, telegramId), eq(achievementsTable.achievementId, achievementId)));
 
-        if (!existing) {
-          // Achievement progress not recorded at all — can't claim
-          return { status: "not_found" as const };
-        }
-        if (existing.progress < def.goal) {
-          return { status: "not_completed" as const };
-        }
-        if (existing.claimed === 1) {
-          return { status: "already_claimed" as const };
-        }
+        if (!existing) return { status: "not_found" as const };
+        if (existing.progress < def.goal) return { status: "not_completed" as const };
+        if (existing.claimed === 1) return { status: "already_claimed" as const };
 
         // Atomically mark as claimed (WHERE claimed = 0 guards concurrent requests)
         const updated = await tx
@@ -1643,9 +1649,17 @@ router.post("/:telegramId/action", async (req, res) => {
           .where(and(eq(achievementsTable.id, existing.id), eq(achievementsTable.claimed, 0)))
           .returning({ id: achievementsTable.id });
 
-        if (updated.length === 0) {
-          return { status: "already_claimed" as const };
-        }
+        if (updated.length === 0) return { status: "already_claimed" as const };
+
+        // Credit rewards to farm state inside the same transaction
+        await tx.update(farmStateTable).set({
+          plots, coins: newCoinsAch, gems: newGemsAch, xp, level: levelAch, energy, maxEnergy,
+          animals, buildings, products, inventory, seeds: newSeedsAch,
+          quests, npcOrders, items, activeSprinklers,
+          worlds, activeWorldId,
+          updatedAt: new Date(),
+        }).where(eq(farmStateTable.telegramId, telegramId));
+
         return { status: "ok" as const };
       });
 
@@ -1653,23 +1667,11 @@ router.post("/:telegramId/action", async (req, res) => {
       if (achResult.status === "not_completed") return res.status(400).json({ error: "Достижение ещё не выполнено" });
       if (achResult.status === "already_claimed") return res.status(409).json({ error: "Награда уже получена" });
 
-      coins += def.rewardCoins;
-      gems += def.rewardGems;
-      if (def.rewardSeedType && def.rewardSeedQty) {
-        seeds[def.rewardSeedType as keyof CropInventory] = ((seeds[def.rewardSeedType as keyof CropInventory] as number) ?? 0) + def.rewardSeedQty;
-      }
+      coins = newCoinsAch;
+      gems = newGemsAch;
+      Object.assign(seeds, newSeedsAch);
 
-      const level = getLevelFromXp(xp);
-      if (level > farm.level) maxEnergy = Math.min(60, 30 + level * 2);
-      worlds[activeWorldId] = { ...(worlds[activeWorldId] || { unlocked: true }), plots };
-      await db.update(farmStateTable).set({
-        plots, coins, gems, xp, level, energy, maxEnergy,
-        animals, buildings, products, inventory, seeds,
-        quests, npcOrders, items, activeSprinklers,
-        worlds, activeWorldId,
-        updatedAt: new Date(),
-      }).where(eq(farmStateTable.telegramId, telegramId));
-      const farmOutAch = serializeFarm({ ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId }, telegramId);
+      const farmOutAch = serializeFarm({ ...farm, plots, coins, gems, xp, level: levelAch, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId }, telegramId);
       const playerAchsAch = await getPlayerAchievements(telegramId);
       return res.json({ ...farmOutAch, achievements: buildAchievementsResponse(playerAchsAch) });
 
@@ -1741,7 +1743,8 @@ router.post("/:telegramId/action", async (req, res) => {
         updatedAt: new Date(),
       }).where(eq(farmStateTable.telegramId, telegramId));
       const farmOut = serializeFarm({ ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId }, telegramId);
-      return res.json({ ...farmOut, caseResult });
+      const playerAchsCase = await getPlayerAchievements(telegramId);
+      return res.json({ ...farmOut, caseResult, achievements: buildAchievementsResponse(playerAchsCase) });
 
     } else {
       return res.status(400).json({ error: "Неизвестное действие" });

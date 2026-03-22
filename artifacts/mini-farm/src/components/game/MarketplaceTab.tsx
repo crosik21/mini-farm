@@ -265,6 +265,8 @@ export function MarketplaceTab({ farm }: MarketplaceTabProps) {
 
   const [activeSection, setActiveSection] = useState<"all" | "mine">("all");
   const [filter, setFilter] = useState<FilterType>("all");
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
   const [listings, setListings] = useState<MarketListing[]>([]);
   const [myListings, setMyListings] = useState<MarketListing[]>([]);
   const [loading, setLoading] = useState(false);
@@ -274,8 +276,13 @@ export function MarketplaceTab({ farm }: MarketplaceTabProps) {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
+      const params = new URLSearchParams();
+      if (filter !== "all") params.set("itemType", filter);
+      if (minPrice) params.set("minPrice", minPrice);
+      if (maxPrice) params.set("maxPrice", maxPrice);
+      const qs = params.toString() ? `?${params.toString()}` : "";
       const [allRes, myRes] = await Promise.all([
-        fetch(`${API_BASE}/api/market/listings`, { headers: { "x-telegram-id": telegramId } }),
+        fetch(`${API_BASE}/api/market/listings${qs}`, { headers: { "x-telegram-id": telegramId } }),
         fetch(`${API_BASE}/api/market/my-listings`, { headers: { "x-telegram-id": telegramId } }),
       ]);
       const allData = await allRes.json();
@@ -287,7 +294,7 @@ export function MarketplaceTab({ farm }: MarketplaceTabProps) {
     } finally {
       setLoading(false);
     }
-  }, [telegramId]);
+  }, [telegramId, filter, minPrice, maxPrice]);
 
   useEffect(() => {
     fetchAll();
@@ -332,7 +339,7 @@ export function MarketplaceTab({ farm }: MarketplaceTabProps) {
     }
   }
 
-  const filteredListings = listings.filter((l) => filter === "all" || l.itemType === filter);
+  const filteredListings = listings;
 
   return (
     <div className="p-4 pb-6 flex flex-col gap-3">
@@ -378,6 +385,32 @@ export function MarketplaceTab({ farm }: MarketplaceTabProps) {
                 </button>
               );
             })}
+          </div>
+
+          {/* Price filter */}
+          <div className="flex gap-2 items-center">
+            <span className="text-xs text-muted-foreground shrink-0">🪙 Цена:</span>
+            <input
+              type="number" min={1} placeholder="от"
+              value={minPrice}
+              onChange={(e) => setMinPrice(e.target.value)}
+              className="flex-1 border rounded-xl px-2 py-1 text-xs text-center"
+            />
+            <span className="text-xs text-muted-foreground">—</span>
+            <input
+              type="number" min={1} placeholder="до"
+              value={maxPrice}
+              onChange={(e) => setMaxPrice(e.target.value)}
+              className="flex-1 border rounded-xl px-2 py-1 text-xs text-center"
+            />
+            {(minPrice || maxPrice) && (
+              <button
+                onClick={() => { setMinPrice(""); setMaxPrice(""); }}
+                className="text-xs text-muted-foreground px-2 py-1 rounded-xl border"
+              >
+                ✕
+              </button>
+            )}
           </div>
 
           {loading && <p className="text-center text-sm text-muted-foreground py-4">Загрузка...</p>}

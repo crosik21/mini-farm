@@ -5,13 +5,14 @@ import botRouter from "./bot";
 import adminRouter from "./admin";
 import socialRouter from "./social";
 import avatarRouter from "./avatar";
-import fishingRouter from "./fishing";
+import fishingRouter, { createFarmFishingAliasRouter } from "./fishing";
 import marketRouter from "./market";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use("/farm", farmRouter);
+router.use("/farm", createFarmFishingAliasRouter());
 router.use("/bot", botRouter);
 router.use("/admin", adminRouter);
 router.use("/social", socialRouter);

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { farmStateTable, marketListingsTable } from "@workspace/db";
-import { eq, and, inArray, sql, desc, lt } from "drizzle-orm";
+import { eq, and, inArray, sql, desc, lt, gte, lte } from "drizzle-orm";
 import { FISH_META } from "./fishing";
 
 const router: IRouter = Router();
@@ -13,16 +13,77 @@ function getTelegramId(req: any): string | null {
 const LISTING_DURATION_H = 24;
 const MAX_ACTIVE_LISTINGS = 5;
 
+/**
+ * Expire old listings and return unsold items to sellers.
+ * Must be called inside a transaction or standalone — here we run it standalone
+ * before reads. Item return is done per-seller in a loop with per-row locking.
+ */
 async function expireOldListings() {
-  await db
-    .update(marketListingsTable)
-    .set({ status: "cancelled" })
+  // Find all expired active listings
+  const expired = await db
+    .select()
+    .from(marketListingsTable)
     .where(
       and(
         eq(marketListingsTable.status, "active"),
         lt(marketListingsTable.expiresAt, new Date()),
       )
     );
+
+  if (expired.length === 0) return;
+
+  // Group by seller so we can batch the updates
+  const bySeller: Record<string, typeof expired> = {};
+  for (const l of expired) {
+    if (!bySeller[l.sellerId]) bySeller[l.sellerId] = [];
+    bySeller[l.sellerId].push(l);
+  }
+
+  // For each seller, fetch their farm and return items
+  for (const [sellerId, listings] of Object.entries(bySeller)) {
+    await db.transaction(async (tx) => {
+      const [farm] = await tx
+        .select()
+        .from(farmStateTable)
+        .where(eq(farmStateTable.telegramId, sellerId))
+        .for("update");
+
+      if (!farm) return;
+
+      let update: Record<string, any> = {
+        inventory: { ...(farm.inventory as Record<string, number>) },
+        products: { ...(farm.products as Record<string, number>) },
+        fishInventory: { ...(farm.fishInventory as Record<string, number> ?? {}) },
+        updatedAt: new Date(),
+      };
+
+      for (const l of listings) {
+        const qty = l.quantity;
+        if (l.itemType === "crop") {
+          (update.inventory as Record<string, number>)[l.itemId] =
+            ((update.inventory as Record<string, number>)[l.itemId] ?? 0) + qty;
+        } else if (l.itemType === "product") {
+          (update.products as Record<string, number>)[l.itemId] =
+            ((update.products as Record<string, number>)[l.itemId] ?? 0) + qty;
+        } else if (l.itemType === "fish") {
+          (update.fishInventory as Record<string, number>)[l.itemId] =
+            ((update.fishInventory as Record<string, number>)[l.itemId] ?? 0) + qty;
+        }
+      }
+
+      await tx
+        .update(farmStateTable)
+        .set(update)
+        .where(eq(farmStateTable.telegramId, sellerId));
+
+      // Mark all those listings as cancelled
+      const ids = listings.map((l) => l.id);
+      await tx
+        .update(marketListingsTable)
+        .set({ status: "cancelled" })
+        .where(inArray(marketListingsTable.id, ids));
+    });
+  }
 }
 
 function getItemInventory(farm: any, itemType: string, itemId: string): number {
@@ -70,27 +131,43 @@ function addItemInventory(farm: any, itemType: string, itemId: string, qty: numb
   return {};
 }
 
-// GET /api/market/listings?itemType=&page=
+// GET /api/market/listings?itemType=&minPrice=&maxPrice=&page=
 router.get("/listings", async (req, res) => {
   const me = getTelegramId(req);
   if (!me) return res.status(401).json({ error: "No telegram id" });
 
   await expireOldListings();
 
-  const { itemType, page = "1" } = req.query as { itemType?: string; page?: string };
+  const { itemType, minPrice, maxPrice, page = "1" } = req.query as {
+    itemType?: string;
+    minPrice?: string;
+    maxPrice?: string;
+    page?: string;
+  };
   const pageNum = Math.max(1, parseInt(page));
   const pageSize = 20;
   const offset = (pageNum - 1) * pageSize;
 
-  let query = db
+  const conditions = [eq(marketListingsTable.status, "active")];
+  if (itemType && ["crop", "product", "fish"].includes(itemType)) {
+    conditions.push(eq(marketListingsTable.itemType, itemType));
+  }
+  if (minPrice) {
+    const min = parseInt(minPrice);
+    if (!isNaN(min)) conditions.push(gte(marketListingsTable.pricePerUnit, min));
+  }
+  if (maxPrice) {
+    const max = parseInt(maxPrice);
+    if (!isNaN(max)) conditions.push(lte(marketListingsTable.pricePerUnit, max));
+  }
+
+  const listings = await db
     .select()
     .from(marketListingsTable)
-    .where(eq(marketListingsTable.status, "active"))
+    .where(and(...conditions))
     .orderBy(desc(marketListingsTable.createdAt))
     .limit(pageSize)
     .offset(offset);
-
-  const listings = await query;
 
   // Enrich with seller name
   const sellerIds = [...new Set(listings.map(l => l.sellerId))];
@@ -103,15 +180,13 @@ router.get("/listings", async (req, res) => {
     for (const r of rows) sellers[r.telegramId] = { username: r.username, firstName: r.firstName };
   }
 
-  const enriched = listings
-    .filter(l => itemType ? l.itemType === itemType : true)
-    .map(l => ({
-      ...l,
-      sellerName: sellers[l.sellerId]?.username
-        ? `@${sellers[l.sellerId]?.username}`
-        : sellers[l.sellerId]?.firstName ?? "Игрок",
-      isOwn: l.sellerId === me,
-    }));
+  const enriched = listings.map(l => ({
+    ...l,
+    sellerName: sellers[l.sellerId]?.username
+      ? `@${sellers[l.sellerId]?.username}`
+      : sellers[l.sellerId]?.firstName ?? "Игрок",
+    isOwn: l.sellerId === me,
+  }));
 
   res.json({ listings: enriched, page: pageNum, pageSize, fishMeta: FISH_META });
 });
@@ -154,38 +229,46 @@ router.post("/listings", async (req, res) => {
     return res.status(400).json({ error: "Количество и цена должны быть > 0" });
   }
 
-  const [farm] = await db.select().from(farmStateTable).where(eq(farmStateTable.telegramId, me));
-  if (!farm) return res.status(404).json({ error: "Ферма не найдена" });
+  const result = await db.transaction(async (tx) => {
+    const [farm] = await tx
+      .select()
+      .from(farmStateTable)
+      .where(eq(farmStateTable.telegramId, me))
+      .for("update");
+    if (!farm) return { error: "Ферма не найдена", status: 404 };
 
-  // Check active listings count
-  const [countRow] = await db
-    .select({ cnt: sql<number>`count(*)` })
-    .from(marketListingsTable)
-    .where(and(eq(marketListingsTable.sellerId, me), eq(marketListingsTable.status, "active")));
-  if (Number(countRow.cnt) >= MAX_ACTIVE_LISTINGS) {
-    return res.status(400).json({ error: `Максимум ${MAX_ACTIVE_LISTINGS} активных лотов` });
-  }
+    const [countRow] = await tx
+      .select({ cnt: sql<number>`count(*)` })
+      .from(marketListingsTable)
+      .where(and(eq(marketListingsTable.sellerId, me), eq(marketListingsTable.status, "active")));
+    if (Number(countRow.cnt) >= MAX_ACTIVE_LISTINGS) {
+      return { error: `Максимум ${MAX_ACTIVE_LISTINGS} активных лотов`, status: 400 };
+    }
 
-  const have = getItemInventory(farm, itemType, itemId);
-  if (have < quantity) {
-    return res.status(400).json({ error: `Недостаточно ${itemId} (есть: ${have})` });
-  }
+    const have = getItemInventory(farm, itemType, itemId);
+    if (have < quantity) {
+      return { error: `Недостаточно ${itemId} (есть: ${have})`, status: 400 };
+    }
 
-  const deducted = deductItemInventory(farm, itemType, itemId, quantity);
-  await db.update(farmStateTable).set({ ...deducted, updatedAt: new Date() }).where(eq(farmStateTable.telegramId, me));
+    const deducted = deductItemInventory(farm, itemType, itemId, quantity);
+    await tx.update(farmStateTable).set({ ...deducted, updatedAt: new Date() }).where(eq(farmStateTable.telegramId, me));
 
-  const expiresAt = new Date(Date.now() + LISTING_DURATION_H * 3600 * 1000);
-  const [listing] = await db.insert(marketListingsTable).values({
-    sellerId: me,
-    itemType,
-    itemId,
-    quantity,
-    pricePerUnit,
-    status: "active",
-    expiresAt,
-  }).returning();
+    const expiresAt = new Date(Date.now() + LISTING_DURATION_H * 3600 * 1000);
+    const [listing] = await tx.insert(marketListingsTable).values({
+      sellerId: me,
+      itemType,
+      itemId,
+      quantity,
+      pricePerUnit,
+      status: "active",
+      expiresAt,
+    }).returning();
 
-  res.json({ ok: true, listing });
+    return { ok: true, listing };
+  });
+
+  if ("error" in result) return res.status((result as any).status ?? 400).json({ error: (result as any).error });
+  res.json(result);
 });
 
 // POST /api/market/listings/:id/buy
@@ -196,41 +279,64 @@ router.post("/listings/:id/buy", async (req, res) => {
   const id = parseInt(req.params.id);
   const { quantity } = req.body as { quantity?: number };
 
-  const [listing] = await db.select().from(marketListingsTable).where(eq(marketListingsTable.id, id));
-  if (!listing) return res.status(404).json({ error: "Лот не найден" });
-  if (listing.status !== "active") return res.status(400).json({ error: "Лот недоступен" });
-  if (listing.sellerId === me) return res.status(400).json({ error: "Нельзя покупать собственный лот" });
-  if (new Date() > new Date(listing.expiresAt)) return res.status(400).json({ error: "Лот истёк" });
+  const result = await db.transaction(async (tx) => {
+    // Lock the listing row first
+    const [listing] = await tx
+      .select()
+      .from(marketListingsTable)
+      .where(eq(marketListingsTable.id, id))
+      .for("update");
 
-  const buyQty = quantity && quantity > 0 && quantity <= listing.quantity ? quantity : listing.quantity;
-  const totalCost = buyQty * listing.pricePerUnit;
+    if (!listing) return { error: "Лот не найден", status: 404 };
+    if (listing.status !== "active") return { error: "Лот недоступен", status: 400 };
+    if (listing.sellerId === me) return { error: "Нельзя покупать собственный лот", status: 400 };
+    if (new Date() > new Date(listing.expiresAt)) return { error: "Лот истёк", status: 400 };
 
-  const [buyerFarm] = await db.select().from(farmStateTable).where(eq(farmStateTable.telegramId, me));
-  if (!buyerFarm) return res.status(404).json({ error: "Ферма не найдена" });
-  if (buyerFarm.coins < totalCost) return res.status(400).json({ error: `Недостаточно монет (нужно ${totalCost})` });
+    const buyQty = quantity && quantity > 0 && quantity <= listing.quantity ? quantity : listing.quantity;
+    const totalCost = buyQty * listing.pricePerUnit;
 
-  const [sellerFarm] = await db.select().from(farmStateTable).where(eq(farmStateTable.telegramId, listing.sellerId));
-  if (!sellerFarm) return res.status(404).json({ error: "Продавец не найден" });
+    // Lock buyer and seller rows
+    const [buyerFarm] = await tx
+      .select()
+      .from(farmStateTable)
+      .where(eq(farmStateTable.telegramId, me))
+      .for("update");
+    if (!buyerFarm) return { error: "Ферма не найдена", status: 404 };
+    if (buyerFarm.coins < totalCost) return { error: `Недостаточно монет (нужно ${totalCost})`, status: 400 };
 
-  const buyerUpdate = addItemInventory(buyerFarm, listing.itemType, listing.itemId, buyQty);
-  const sellerCoinsGain = totalCost;
+    const [sellerFarm] = await tx
+      .select()
+      .from(farmStateTable)
+      .where(eq(farmStateTable.telegramId, listing.sellerId))
+      .for("update");
+    if (!sellerFarm) return { error: "Продавец не найден", status: 404 };
 
-  const newQty = listing.quantity - buyQty;
-  const newStatus = newQty <= 0 ? "sold" : "active";
+    const buyerInventoryUpdate = addItemInventory(buyerFarm, listing.itemType, listing.itemId, buyQty);
 
-  await Promise.all([
-    db.update(farmStateTable)
-      .set({ ...buyerUpdate, coins: buyerFarm.coins - totalCost, updatedAt: new Date() })
-      .where(eq(farmStateTable.telegramId, me)),
-    db.update(farmStateTable)
-      .set({ coins: sellerFarm.coins + sellerCoinsGain, updatedAt: new Date() })
-      .where(eq(farmStateTable.telegramId, listing.sellerId)),
-    db.update(marketListingsTable)
+    const newQty = listing.quantity - buyQty;
+    const newStatus = newQty <= 0 ? "sold" : "active";
+
+    // Update buyer, seller, and listing in the same transaction
+    await tx
+      .update(farmStateTable)
+      .set({ ...buyerInventoryUpdate, coins: buyerFarm.coins - totalCost, updatedAt: new Date() })
+      .where(eq(farmStateTable.telegramId, me));
+
+    await tx
+      .update(farmStateTable)
+      .set({ coins: sellerFarm.coins + totalCost, updatedAt: new Date() })
+      .where(eq(farmStateTable.telegramId, listing.sellerId));
+
+    await tx
+      .update(marketListingsTable)
       .set({ quantity: newQty, status: newStatus })
-      .where(eq(marketListingsTable.id, id)),
-  ]);
+      .where(eq(marketListingsTable.id, id));
 
-  res.json({ ok: true, bought: buyQty, totalCost, newInventory: buyerUpdate });
+    return { ok: true, bought: buyQty, totalCost, newInventory: buyerInventoryUpdate };
+  });
+
+  if ("error" in result) return res.status((result as any).status ?? 400).json({ error: (result as any).error });
+  res.json(result);
 });
 
 // DELETE /api/market/listings/:id — cancel own listing
@@ -239,22 +345,35 @@ router.delete("/listings/:id", async (req, res) => {
   if (!me) return res.status(401).json({ error: "No telegram id" });
 
   const id = parseInt(req.params.id);
-  const [listing] = await db.select().from(marketListingsTable).where(eq(marketListingsTable.id, id));
-  if (!listing) return res.status(404).json({ error: "Лот не найден" });
-  if (listing.sellerId !== me) return res.status(403).json({ error: "Нет доступа" });
-  if (listing.status !== "active") return res.status(400).json({ error: "Лот уже закрыт" });
 
-  const [farm] = await db.select().from(farmStateTable).where(eq(farmStateTable.telegramId, me));
-  if (!farm) return res.status(404).json({ error: "Ферма не найдена" });
+  const result = await db.transaction(async (tx) => {
+    const [listing] = await tx
+      .select()
+      .from(marketListingsTable)
+      .where(eq(marketListingsTable.id, id))
+      .for("update");
 
-  const restored = addItemInventory(farm, listing.itemType, listing.itemId, listing.quantity);
+    if (!listing) return { error: "Лот не найден", status: 404 };
+    if (listing.sellerId !== me) return { error: "Нет доступа", status: 403 };
+    if (listing.status !== "active") return { error: "Лот уже закрыт", status: 400 };
 
-  await Promise.all([
-    db.update(marketListingsTable).set({ status: "cancelled" }).where(eq(marketListingsTable.id, id)),
-    db.update(farmStateTable).set({ ...restored, updatedAt: new Date() }).where(eq(farmStateTable.telegramId, me)),
-  ]);
+    const [farm] = await tx
+      .select()
+      .from(farmStateTable)
+      .where(eq(farmStateTable.telegramId, me))
+      .for("update");
+    if (!farm) return { error: "Ферма не найдена", status: 404 };
 
-  res.json({ ok: true });
+    const restored = addItemInventory(farm, listing.itemType, listing.itemId, listing.quantity);
+
+    await tx.update(marketListingsTable).set({ status: "cancelled" }).where(eq(marketListingsTable.id, id));
+    await tx.update(farmStateTable).set({ ...restored, updatedAt: new Date() }).where(eq(farmStateTable.telegramId, me));
+
+    return { ok: true };
+  });
+
+  if ("error" in result) return res.status((result as any).status ?? 400).json({ error: (result as any).error });
+  res.json(result);
 });
 
 export default router;

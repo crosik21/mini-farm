@@ -98,35 +98,41 @@ router.post("/collect", async (req, res) => {
   const me = getTelegramId(req);
   if (!me) return res.status(401).json({ error: "No telegram id" });
 
-  const [session] = await db
-    .select()
-    .from(fishingTable)
-    .where(and(eq(fishingTable.telegramId, me), eq(fishingTable.claimed, 0)))
-    .orderBy(desc(fishingTable.id))
-    .limit(1);
+  const result = await db.transaction(async (tx) => {
+    const [session] = await tx
+      .select()
+      .from(fishingTable)
+      .where(and(eq(fishingTable.telegramId, me), eq(fishingTable.claimed, 0)))
+      .orderBy(desc(fishingTable.id))
+      .limit(1)
+      .for("update");
 
-  if (!session) return res.status(400).json({ error: "Нет активной рыбалки" });
-  if (new Date() < new Date(session.catchAt)) {
-    return res.status(400).json({ error: "Рыба ещё не поймана, подождите!" });
-  }
+    if (!session) return { error: "Нет активной рыбалки", status: 400 };
+    if (new Date() < new Date(session.catchAt)) {
+      return { error: "Рыба ещё не поймана, подождите!", status: 400 };
+    }
 
-  const fishType = session.fishType!;
-  const fishMeta = FISH_META[fishType];
+    const fishType = session.fishType!;
+    const fishMeta = FISH_META[fishType];
 
-  const [farm] = await db.select().from(farmStateTable).where(eq(farmStateTable.telegramId, me));
-  if (!farm) return res.status(404).json({ error: "Ферма не найдена" });
+    const [farm] = await tx
+      .select()
+      .from(farmStateTable)
+      .where(eq(farmStateTable.telegramId, me))
+      .for("update");
+    if (!farm) return { error: "Ферма не найдена", status: 404 };
 
-  const fishInv = { ...(farm.fishInventory ?? {}) } as Record<string, number>;
-  fishInv[fishType] = (fishInv[fishType] ?? 0) + 1;
+    const fishInv = { ...(farm.fishInventory ?? {}) } as Record<string, number>;
+    fishInv[fishType] = (fishInv[fishType] ?? 0) + 1;
 
-  await Promise.all([
-    db.update(fishingTable).set({ claimed: 1 }).where(eq(fishingTable.id, session.id)),
-    db.update(farmStateTable).set({ fishInventory: fishInv, updatedAt: new Date() }).where(eq(farmStateTable.telegramId, me)),
-  ]);
+    await tx.update(fishingTable).set({ claimed: 1 }).where(eq(fishingTable.id, session.id));
+    await tx.update(farmStateTable).set({ fishInventory: fishInv, updatedAt: new Date() }).where(eq(farmStateTable.telegramId, me));
 
-  const [updatedFarm] = await db.select().from(farmStateTable).where(eq(farmStateTable.telegramId, me));
+    return { ok: true, fishType, fishMeta, fishInventory: fishInv };
+  });
 
-  res.json({ ok: true, fishType, fishMeta, fishInventory: fishInv });
+  if ("error" in result) return res.status((result as any).status ?? 400).json({ error: (result as any).error });
+  res.json(result);
 });
 
 // POST /api/fishing/sell — sell fish from inventory
@@ -140,20 +146,56 @@ router.post("/sell", async (req, res) => {
   const meta = FISH_META[fishType];
   if (!meta) return res.status(400).json({ error: "Неизвестный тип рыбы" });
 
-  const [farm] = await db.select().from(farmStateTable).where(eq(farmStateTable.telegramId, me));
-  if (!farm) return res.status(404).json({ error: "Ферма не найдена" });
+  const result = await db.transaction(async (tx) => {
+    const [farm] = await tx
+      .select()
+      .from(farmStateTable)
+      .where(eq(farmStateTable.telegramId, me))
+      .for("update");
+    if (!farm) return { error: "Ферма не найдена", status: 404 };
 
-  const fishInv = { ...(farm.fishInventory ?? {}) } as Record<string, number>;
-  if ((fishInv[fishType] ?? 0) < quantity) return res.status(400).json({ error: "Недостаточно рыбы" });
+    const fishInv = { ...(farm.fishInventory ?? {}) } as Record<string, number>;
+    if ((fishInv[fishType] ?? 0) < quantity) return { error: "Недостаточно рыбы", status: 400 };
 
-  fishInv[fishType] -= quantity;
-  const earned = meta.sellPrice * quantity;
+    fishInv[fishType] -= quantity;
+    const earned = meta.sellPrice * quantity;
+    const newCoins = farm.coins + earned;
 
-  await db.update(farmStateTable)
-    .set({ fishInventory: fishInv, coins: farm.coins + earned, updatedAt: new Date() })
-    .where(eq(farmStateTable.telegramId, me));
+    await tx
+      .update(farmStateTable)
+      .set({ fishInventory: fishInv, coins: newCoins, updatedAt: new Date() })
+      .where(eq(farmStateTable.telegramId, me));
 
-  res.json({ ok: true, earned, fishInventory: fishInv, coins: farm.coins + earned });
+    return { ok: true, earned, fishInventory: fishInv, coins: newCoins };
+  });
+
+  if ("error" in result) return res.status((result as any).status ?? 400).json({ error: (result as any).error });
+  res.json(result);
 });
 
 export default router;
+
+/**
+ * Alias router: GET /api/farm/:id/fishing
+ * Returns the caller's active fishing session (ignores the :id param, uses x-telegram-id header).
+ * Mounted in index.ts at /farm so Express sees it as /farm/:id/fishing.
+ */
+export function createFarmFishingAliasRouter() {
+  const aliasRouter: IRouter = Router({ mergeParams: true });
+
+  aliasRouter.get("/:id/fishing", async (req, res) => {
+    const me = getTelegramId(req);
+    if (!me) return res.status(401).json({ error: "No telegram id" });
+
+    const [session] = await db
+      .select()
+      .from(fishingTable)
+      .where(and(eq(fishingTable.telegramId, me), eq(fishingTable.claimed, 0)))
+      .orderBy(desc(fishingTable.id))
+      .limit(1);
+
+    res.json({ session: session ?? null, fishMeta: FISH_META });
+  });
+
+  return aliasRouter;
+}

@@ -381,19 +381,26 @@ function PlayersTab({ secret }: { secret: string }) {
 }
 
 // ── Season Tab ─────────────────────────────────────────────────────────────────
+interface EventCropRow { id: string; name: string; emoji: string; growSec: string; seedCostCoins: string; sellPrice: string; xp: string; }
+interface EventShopRow { id: string; name: string; emoji: string; cost: string; rewardCoins: string; rewardGems: string; }
 interface EventFormState {
   id: string; name: string; emoji: string; description: string;
   startAt: string; endAt: string; eventCoinEmoji: string; eventCoinReward: string;
 }
+
+function blankCrop(): EventCropRow { return { id: "ev_crop_" + Date.now(), name: "", emoji: "🌿", growSec: "300", seedCostCoins: "20", sellPrice: "60", xp: "15" }; }
+function blankShopItem(): EventShopRow { return { id: "ev_item_" + Date.now(), name: "", emoji: "🎁", cost: "10", rewardCoins: "50", rewardGems: "0" }; }
 
 function EventManagementSection({ secret, onMsg }: { secret: string; onMsg: (msg: string) => void }) {
   const defaultForm: EventFormState = {
     id: "event_" + Date.now(), name: "", emoji: "🎉", description: "",
     startAt: new Date().toISOString().slice(0, 16),
     endAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
-    eventCoinEmoji: "🪙", eventCoinReward: "3",
+    eventCoinEmoji: "🌟", eventCoinReward: "3",
   };
   const [form, setForm] = useState<EventFormState>(defaultForm);
+  const [eventCrops, setEventCrops] = useState<EventCropRow[]>([]);
+  const [shopItems, setShopItems] = useState<EventShopRow[]>([]);
   const [showForm, setShowForm] = useState(false);
 
   const { data: evData, refetch: refetchEv } = useQuery<{ activeEvent: any }>({
@@ -412,13 +419,21 @@ function EventManagementSection({ secret, onMsg }: { secret: string; onMsg: (msg
         endAt: new Date(form.endAt).toISOString(),
         eventCoinEmoji: form.eventCoinEmoji,
         eventCoinReward: Number(form.eventCoinReward) || 3,
-        eventCrops: [], shopItems: [],
+        eventCrops: eventCrops.filter((c) => c.name).map((c) => ({
+          id: c.id, name: c.name, emoji: c.emoji,
+          growSec: Number(c.growSec) || 300, seedCostCoins: Number(c.seedCostCoins) || 20,
+          sellPrice: Number(c.sellPrice) || 60, xp: Number(c.xp) || 15,
+        })),
+        shopItems: shopItems.filter((s) => s.name).map((s) => ({
+          id: s.id, name: s.name, emoji: s.emoji, cost: Number(s.cost) || 10,
+          rewardCoins: Number(s.rewardCoins) || 0, rewardGems: Number(s.rewardGems) || 0,
+        })),
       };
       const r = await adminFetch("/api/admin/event", secret, { method: "POST", body: JSON.stringify(body) });
       if (!r.ok) throw new Error((await r.json()).error);
       return r.json();
     },
-    onSuccess: () => { refetchEv(); setShowForm(false); onMsg("Ивент запущен!"); },
+    onSuccess: () => { refetchEv(); setShowForm(false); setEventCrops([]); setShopItems([]); onMsg("Ивент запущен!"); },
     onError: (e: Error) => onMsg("Ошибка: " + e.message),
   });
 
@@ -443,6 +458,9 @@ function EventManagementSection({ secret, onMsg }: { secret: string; onMsg: (msg
             <div className="flex-1">
               <div className="font-bold text-purple-800">{activeEvent.name}</div>
               <div className="text-xs text-purple-500">до {new Date(activeEvent.endAt).toLocaleString("ru")}</div>
+              {activeEvent.eventCrops?.length > 0 && (
+                <div className="text-xs text-purple-400">{activeEvent.eventCrops.length} культур · {activeEvent.shopItems?.length ?? 0} товаров</div>
+              )}
             </div>
             <button
               onClick={() => stopEvent()}
@@ -468,8 +486,8 @@ function EventManagementSection({ secret, onMsg }: { secret: string; onMsg: (msg
           <div className="grid grid-cols-2 gap-2">
             <input className="border rounded-xl px-3 py-2 text-sm col-span-2" placeholder="Название" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
             <input className="border rounded-xl px-3 py-2 text-sm" placeholder="Эмодзи 🎉" value={form.emoji} onChange={(e) => setForm((f) => ({ ...f, emoji: e.target.value }))} />
-            <input className="border rounded-xl px-3 py-2 text-sm" placeholder="Монет-эмодзи 🪙" value={form.eventCoinEmoji} onChange={(e) => setForm((f) => ({ ...f, eventCoinEmoji: e.target.value }))} />
-            <input className="border rounded-xl px-3 py-2 text-sm" placeholder="Нагр./урожай" type="number" value={form.eventCoinReward} onChange={(e) => setForm((f) => ({ ...f, eventCoinReward: e.target.value }))} />
+            <input className="border rounded-xl px-3 py-2 text-sm" placeholder="Монет-эмодзи 🌟" value={form.eventCoinEmoji} onChange={(e) => setForm((f) => ({ ...f, eventCoinEmoji: e.target.value }))} />
+            <input className="border rounded-xl px-3 py-2 text-sm" placeholder="Монет/урожай" type="number" value={form.eventCoinReward} onChange={(e) => setForm((f) => ({ ...f, eventCoinReward: e.target.value }))} />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -481,8 +499,48 @@ function EventManagementSection({ secret, onMsg }: { secret: string; onMsg: (msg
               <input type="datetime-local" className="border rounded-xl px-3 py-2 text-sm w-full" value={form.endAt} onChange={(e) => setForm((f) => ({ ...f, endAt: e.target.value }))} />
             </div>
           </div>
+
+          {/* Event Crops */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[10px] text-gray-400 font-bold uppercase">Ивентовые культуры</label>
+              <button onClick={() => setEventCrops((p) => [...p, blankCrop()])} className="text-xs text-purple-600 font-bold">+ Добавить</button>
+            </div>
+            {eventCrops.map((crop, i) => (
+              <div key={crop.id} className="grid grid-cols-4 gap-1 mb-1 items-center">
+                <input className="border rounded-lg px-2 py-1 text-xs col-span-1" placeholder="Эмодзи" value={crop.emoji} onChange={(e) => setEventCrops((p) => p.map((c, j) => j === i ? { ...c, emoji: e.target.value } : c))} />
+                <input className="border rounded-lg px-2 py-1 text-xs col-span-2" placeholder="Название" value={crop.name} onChange={(e) => setEventCrops((p) => p.map((c, j) => j === i ? { ...c, name: e.target.value } : c))} />
+                <button onClick={() => setEventCrops((p) => p.filter((_, j) => j !== i))} className="text-red-400 text-xs font-bold">✕</button>
+                <input className="border rounded-lg px-2 py-1 text-xs" placeholder="Рост (сек)" type="number" value={crop.growSec} onChange={(e) => setEventCrops((p) => p.map((c, j) => j === i ? { ...c, growSec: e.target.value } : c))} />
+                <input className="border rounded-lg px-2 py-1 text-xs" placeholder="Цена семян" type="number" value={crop.seedCostCoins} onChange={(e) => setEventCrops((p) => p.map((c, j) => j === i ? { ...c, seedCostCoins: e.target.value } : c))} />
+                <input className="border rounded-lg px-2 py-1 text-xs" placeholder="Продажа" type="number" value={crop.sellPrice} onChange={(e) => setEventCrops((p) => p.map((c, j) => j === i ? { ...c, sellPrice: e.target.value } : c))} />
+                <input className="border rounded-lg px-2 py-1 text-xs" placeholder="XP" type="number" value={crop.xp} onChange={(e) => setEventCrops((p) => p.map((c, j) => j === i ? { ...c, xp: e.target.value } : c))} />
+              </div>
+            ))}
+            {eventCrops.length === 0 && <div className="text-xs text-gray-300 italic">Нет культур (базовые культуры тоже дают ивент-монеты)</div>}
+          </div>
+
+          {/* Shop Items */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[10px] text-gray-400 font-bold uppercase">Товары магазина</label>
+              <button onClick={() => setShopItems((p) => [...p, blankShopItem()])} className="text-xs text-purple-600 font-bold">+ Добавить</button>
+            </div>
+            {shopItems.map((item, i) => (
+              <div key={item.id} className="grid grid-cols-4 gap-1 mb-1 items-center">
+                <input className="border rounded-lg px-2 py-1 text-xs" placeholder="Эмодзи" value={item.emoji} onChange={(e) => setShopItems((p) => p.map((s, j) => j === i ? { ...s, emoji: e.target.value } : s))} />
+                <input className="border rounded-lg px-2 py-1 text-xs col-span-2" placeholder="Название" value={item.name} onChange={(e) => setShopItems((p) => p.map((s, j) => j === i ? { ...s, name: e.target.value } : s))} />
+                <button onClick={() => setShopItems((p) => p.filter((_, j) => j !== i))} className="text-red-400 text-xs font-bold">✕</button>
+                <input className="border rounded-lg px-2 py-1 text-xs" placeholder="Цена (монет)" type="number" value={item.cost} onChange={(e) => setShopItems((p) => p.map((s, j) => j === i ? { ...s, cost: e.target.value } : s))} />
+                <input className="border rounded-lg px-2 py-1 text-xs" placeholder="Награда 🪙" type="number" value={item.rewardCoins} onChange={(e) => setShopItems((p) => p.map((s, j) => j === i ? { ...s, rewardCoins: e.target.value } : s))} />
+                <input className="border rounded-lg px-2 py-1 text-xs" placeholder="Награда 💎" type="number" value={item.rewardGems} onChange={(e) => setShopItems((p) => p.map((s, j) => j === i ? { ...s, rewardGems: e.target.value } : s))} />
+              </div>
+            ))}
+            {shopItems.length === 0 && <div className="text-xs text-gray-300 italic">Нет товаров в магазине</div>}
+          </div>
+
           <div className="flex gap-2">
-            <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-200 text-gray-500 font-bold py-2.5 rounded-xl text-sm">Отмена</button>
+            <button onClick={() => { setShowForm(false); setEventCrops([]); setShopItems([]); }} className="flex-1 border border-gray-200 text-gray-500 font-bold py-2.5 rounded-xl text-sm">Отмена</button>
             <button onClick={() => startEvent()} disabled={isStarting || !form.name} className="flex-1 bg-purple-500 text-white font-bold py-2.5 rounded-xl text-sm active:scale-95 transition-all disabled:opacity-50">Запустить</button>
           </div>
         </div>

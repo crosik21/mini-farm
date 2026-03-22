@@ -122,7 +122,8 @@ const ANIMAL_CONFIG: Record<string, { cost: number; productType: string; product
   bee:     { cost: 1200, productType: "honey",productReadySec: 600,  xp: 45, unlockLevel: 7, emoji: "🐝" },
 };
 
-const BUILDING_CONFIG: Record<string, { cost: number; unlockLevel: number; emoji: string; name: string }> = {
+const BUILDING_CONFIG: Record<string, { cost: number; unlockLevel: number; emoji: string; name: string; shelter?: boolean }> = {
+  barn:    { cost: 150,  unlockLevel: 1, emoji: "🏚️", name: "Амбар", shelter: true },
   mill:    { cost: 300,  unlockLevel: 3, emoji: "⚙️", name: "Мельница" },
   bakery:  { cost: 600,  unlockLevel: 5, emoji: "🍞", name: "Пекарня" },
   dairy:   { cost: 800,  unlockLevel: 7, emoji: "🧀", name: "Молочный цех" },
@@ -1092,6 +1093,11 @@ router.post("/:telegramId/action", async (req, res) => {
     const currentWeather = getCurrentWeather();
     const activeEvent = getActiveEvent();
     let eventCoins: number = (farm.eventCoins as number) ?? 0;
+    // Storm shelter: barn building provides protection (no spoil) during storm
+    const hasShelter = buildings.some((b) => BUILDING_CONFIG[b.type]?.shelter === true);
+    const effectiveSpoilChance = (currentWeather === "storm" && hasShelter) ? 0 : STORM_SPOIL_CHANCE;
+    // Potent harvest: storm-surviving crops yield +50% sell coins
+    const STORM_POTENT_MULT = 1.5;
 
     // ── PLANT ──────────────────────────────────────────────────────────────────
     if (action === "plant") {
@@ -1128,8 +1134,9 @@ router.post("/:telegramId/action", async (req, res) => {
       if (!plot || plot.status !== "ready" || !plot.cropType) return res.status(400).json({ error: "Урожай ещё не готов" });
       if (energy < HARVEST_ENERGY) return res.status(400).json({ error: `Нужно ${HARVEST_ENERGY} энергии для сбора` });
 
-      // Storm spoil: 10% chance crop is destroyed
-      if (currentWeather === "storm" && Math.random() < STORM_SPOIL_CHANCE) {
+      // Storm spoil: chance crop is destroyed (0% with barn shelter, 10% without)
+      if (currentWeather === "storm" && Math.random() < effectiveSpoilChance) {
+        // Loss path: crop spoiled by storm
         energy -= HARVEST_ENERGY;
         plots = plots.map((p) => p.id === plotId ? { ...p, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null, doubleHarvest: undefined } : p);
       } else {
@@ -1139,9 +1146,13 @@ router.post("/:telegramId/action", async (req, res) => {
           if (evCropDef) cfg = { growSec: evCropDef.growSec, seedCost: evCropDef.seedCostCoins, sellPrice: evCropDef.sellPrice, xp: evCropDef.xp, energyCost: 2, unlockLevel: 1 };
         }
         const sellMult = SEASON_SELL_MULTIPLIER[season] ?? 1;
+        // Potent path: storm-surviving crops are "potent" — yield +50% sell coins
+        const potentMult = currentWeather === "storm" ? STORM_POTENT_MULT : 1;
         const extraDouble = worldCfg.doubleChanceBonus > 0 && Math.random() < worldCfg.doubleChanceBonus;
         const harvestQty = (plot.doubleHarvest || extraDouble) ? 2 : 1;
         inventory[plot.cropType as keyof CropInventory] = (inventory[plot.cropType as keyof CropInventory] ?? 0) + harvestQty;
+        const sellValue = Math.ceil((cfg?.sellPrice ?? 10) * sellMult * harvestQty * potentMult);
+        coins += sellValue;
         xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier);
         energy -= HARVEST_ENERGY;
         plots = plots.map((p) => p.id === plotId ? { ...p, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null, doubleHarvest: undefined } : p);
@@ -1161,11 +1172,13 @@ router.post("/:telegramId/action", async (req, res) => {
       const sellMult = SEASON_SELL_MULTIPLIER[season] ?? 1;
       const harvestedIds: number[] = [];
       let totalHarvested = 0;
+      const potentMult = currentWeather === "storm" ? STORM_POTENT_MULT : 1;
       for (const plot of readyPlots) {
         if (energy < HARVEST_ENERGY) break;
         energy -= HARVEST_ENERGY;
-        // Storm spoil check per plot
-        if (currentWeather === "storm" && Math.random() < STORM_SPOIL_CHANCE) {
+        // Storm spoil check per plot (0% with shelter, 10% without)
+        if (currentWeather === "storm" && Math.random() < effectiveSpoilChance) {
+          // Loss path: spoiled by storm
           harvestedIds.push(plot.id);
           continue;
         }
@@ -1177,6 +1190,9 @@ router.post("/:telegramId/action", async (req, res) => {
         const extraDouble = worldCfg.doubleChanceBonus > 0 && Math.random() < worldCfg.doubleChanceBonus;
         const harvestQty = (plot.doubleHarvest || extraDouble) ? 2 : 1;
         inventory[plot.cropType as keyof CropInventory] = (inventory[plot.cropType as keyof CropInventory] ?? 0) + harvestQty;
+        // Potent path: storm-surviving crops add +50% coins
+        const sellValue = Math.ceil((cfg?.sellPrice ?? 10) * sellMult * harvestQty * potentMult);
+        coins += sellValue;
         xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier);
         quests = updateQuestProgress(quests, "harvest", plot.cropType!, harvestQty);
         harvestedIds.push(plot.id);
@@ -1893,7 +1909,7 @@ router.post("/:telegramId/action", async (req, res) => {
     await setAchievementAbsolute(telegramId, "level_up", level);
 
     const playerAchs = await getPlayerAchievements(telegramId);
-    res.json({ ...serializeFarm({ ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId }, telegramId), achievements: buildAchievementsResponse(playerAchs) });
+    res.json({ ...serializeFarm({ ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, eventCoins }, telegramId), achievements: buildAchievementsResponse(playerAchs) });
   } catch (err) {
     console.error("performFarmAction error:", err);
     res.status(500).json({ error: "Internal server error" });

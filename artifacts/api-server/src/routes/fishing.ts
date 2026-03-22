@@ -36,6 +36,12 @@ export const FISH_META: Record<string, { name: string; emoji: string; sellPrice:
   legendary_fish: { name: "Легендарная рыба",emoji: "✨", sellPrice: 500 },
 };
 
+type ErrResult = { ok: false; status: number; error: string };
+
+function errResult(error: string, status = 400): ErrResult {
+  return { ok: false, status, error };
+}
+
 const FISHING_ENERGY_COST = 3;
 
 // GET /api/fishing/status — current session for caller
@@ -61,7 +67,6 @@ router.post("/start", async (req, res) => {
   const [farm] = await db.select().from(farmStateTable).where(eq(farmStateTable.telegramId, me));
   if (!farm) return res.status(404).json({ error: "Ферма не найдена" });
 
-  // Check for unclaimed session
   const [existing] = await db
     .select()
     .from(fishingTable)
@@ -98,7 +103,11 @@ router.post("/collect", async (req, res) => {
   const me = getTelegramId(req);
   if (!me) return res.status(401).json({ error: "No telegram id" });
 
-  const result = await db.transaction(async (tx) => {
+  type CollectResult =
+    | ErrResult
+    | { ok: true; fishType: string; fishMeta: typeof FISH_META; fishInventory: Record<string, number> };
+
+  const result: CollectResult = await db.transaction(async (tx): Promise<CollectResult> => {
     const [session] = await tx
       .select()
       .from(fishingTable)
@@ -107,9 +116,9 @@ router.post("/collect", async (req, res) => {
       .limit(1)
       .for("update");
 
-    if (!session) return { error: "Нет активной рыбалки", status: 400 };
+    if (!session) return errResult("Нет активной рыбалки");
     if (new Date() < new Date(session.catchAt)) {
-      return { error: "Рыба ещё не поймана, подождите!", status: 400 };
+      return errResult("Рыба ещё не поймана, подождите!");
     }
 
     const fishType = session.fishType!;
@@ -119,7 +128,7 @@ router.post("/collect", async (req, res) => {
       .from(farmStateTable)
       .where(eq(farmStateTable.telegramId, me))
       .for("update");
-    if (!farm) return { error: "Ферма не найдена", status: 404 };
+    if (!farm) return errResult("Ферма не найдена", 404);
 
     const fishInv = { ...(farm.fishInventory ?? {}) } as Record<string, number>;
     fishInv[fishType] = (fishInv[fishType] ?? 0) + 1;
@@ -127,12 +136,12 @@ router.post("/collect", async (req, res) => {
     await tx.update(fishingTable).set({ claimed: 1 }).where(eq(fishingTable.id, session.id));
     await tx.update(farmStateTable).set({ fishInventory: fishInv, updatedAt: new Date() }).where(eq(farmStateTable.telegramId, me));
 
-    // Return full fishMeta map (not just one entry) — frontend expects data.fishMeta[data.fishType]
+    // Return full fishMeta map — frontend uses data.fishMeta[data.fishType]
     return { ok: true, fishType, fishMeta: FISH_META, fishInventory: fishInv };
   });
 
-  if ("error" in result) return res.status((result as any).status ?? 400).json({ error: (result as any).error });
-  res.json(result);
+  if (!result.ok) return res.status(result.status).json({ error: result.error });
+  res.json({ ok: true, fishType: result.fishType, fishMeta: result.fishMeta, fishInventory: result.fishInventory });
 });
 
 // POST /api/fishing/sell — sell fish from inventory
@@ -146,16 +155,20 @@ router.post("/sell", async (req, res) => {
   const meta = FISH_META[fishType];
   if (!meta) return res.status(400).json({ error: "Неизвестный тип рыбы" });
 
-  const result = await db.transaction(async (tx) => {
+  type SellResult =
+    | ErrResult
+    | { ok: true; earned: number; fishInventory: Record<string, number>; coins: number };
+
+  const result: SellResult = await db.transaction(async (tx): Promise<SellResult> => {
     const [farm] = await tx
       .select()
       .from(farmStateTable)
       .where(eq(farmStateTable.telegramId, me))
       .for("update");
-    if (!farm) return { error: "Ферма не найдена", status: 404 };
+    if (!farm) return errResult("Ферма не найдена", 404);
 
     const fishInv = { ...(farm.fishInventory ?? {}) } as Record<string, number>;
-    if ((fishInv[fishType] ?? 0) < quantity) return { error: "Недостаточно рыбы", status: 400 };
+    if ((fishInv[fishType] ?? 0) < quantity) return errResult("Недостаточно рыбы");
 
     fishInv[fishType] -= quantity;
     const earned = meta.sellPrice * quantity;
@@ -169,8 +182,8 @@ router.post("/sell", async (req, res) => {
     return { ok: true, earned, fishInventory: fishInv, coins: newCoins };
   });
 
-  if ("error" in result) return res.status((result as any).status ?? 400).json({ error: (result as any).error });
-  res.json(result);
+  if (!result.ok) return res.status(result.status).json({ error: result.error });
+  res.json({ ok: true, earned: result.earned, fishInventory: result.fishInventory, coins: result.coins });
 });
 
 export default router;

@@ -13,14 +13,26 @@ function getTelegramId(req: any): string | null {
 const LISTING_DURATION_H = 24;
 const MAX_ACTIVE_LISTINGS = 5;
 
+type OkResult<T> = { ok: true } & T;
+type ErrResult = { ok: false; status: number; error: string };
+type TxResult<T> = OkResult<T> | ErrResult;
+
+function errResult(error: string, status = 400): ErrResult {
+  return { ok: false, status, error };
+}
+
 /**
  * Expire old listings and return unsold items to sellers.
- * Must be called inside a transaction or standalone — here we run it standalone
- * before reads. Item return is done per-seller in a loop with per-row locking.
+ *
+ * Concurrency-safe approach:
+ * 1. SELECT expired active listings (no lock — just a snapshot).
+ * 2. Per seller, open a TX and immediately UPDATE listings WHERE id IN (...) AND status='active'
+ *    returning the rows that were actually transitioned.
+ * 3. Only restore inventory for rows returned from step 2 (prevents double-credit
+ *    from a concurrent cancel that already processed a listing before us).
  */
 async function expireOldListings() {
-  // Find all expired active listings
-  const expired = await db
+  const candidates = await db
     .select()
     .from(marketListingsTable)
     .where(
@@ -30,18 +42,32 @@ async function expireOldListings() {
       )
     );
 
-  if (expired.length === 0) return;
+  if (candidates.length === 0) return;
 
-  // Group by seller so we can batch the updates
-  const bySeller: Record<string, typeof expired> = {};
-  for (const l of expired) {
+  const bySeller: Record<string, typeof candidates> = {};
+  for (const l of candidates) {
     if (!bySeller[l.sellerId]) bySeller[l.sellerId] = [];
     bySeller[l.sellerId].push(l);
   }
 
-  // For each seller, fetch their farm and return items
   for (const [sellerId, listings] of Object.entries(bySeller)) {
+    const ids = listings.map((l) => l.id);
+
     await db.transaction(async (tx) => {
+      // Atomically cancel only rows still active — returns actually-transitioned rows.
+      const transitioned = await tx
+        .update(marketListingsTable)
+        .set({ status: "cancelled" })
+        .where(
+          and(
+            inArray(marketListingsTable.id, ids),
+            eq(marketListingsTable.status, "active"),
+          )
+        )
+        .returning();
+
+      if (transitioned.length === 0) return; // Nothing to restore
+
       const [farm] = await tx
         .select()
         .from(farmStateTable)
@@ -50,83 +76,79 @@ async function expireOldListings() {
 
       if (!farm) return;
 
-      let update: Record<string, any> = {
-        inventory: { ...(farm.inventory as Record<string, number>) },
-        products: { ...(farm.products as Record<string, number>) },
-        fishInventory: { ...(farm.fishInventory as Record<string, number> ?? {}) },
-        updatedAt: new Date(),
-      };
+      const inv = { ...(farm.inventory as Record<string, number>) };
+      const prod = { ...(farm.products as Record<string, number>) };
+      const fish = { ...(farm.fishInventory as Record<string, number> ?? {}) };
 
-      for (const l of listings) {
-        const qty = l.quantity;
+      for (const l of transitioned) {
         if (l.itemType === "crop") {
-          (update.inventory as Record<string, number>)[l.itemId] =
-            ((update.inventory as Record<string, number>)[l.itemId] ?? 0) + qty;
+          inv[l.itemId] = (inv[l.itemId] ?? 0) + l.quantity;
         } else if (l.itemType === "product") {
-          (update.products as Record<string, number>)[l.itemId] =
-            ((update.products as Record<string, number>)[l.itemId] ?? 0) + qty;
+          prod[l.itemId] = (prod[l.itemId] ?? 0) + l.quantity;
         } else if (l.itemType === "fish") {
-          (update.fishInventory as Record<string, number>)[l.itemId] =
-            ((update.fishInventory as Record<string, number>)[l.itemId] ?? 0) + qty;
+          fish[l.itemId] = (fish[l.itemId] ?? 0) + l.quantity;
         }
       }
 
       await tx
         .update(farmStateTable)
-        .set(update)
+        .set({ inventory: inv, products: prod, fishInventory: fish, updatedAt: new Date() })
         .where(eq(farmStateTable.telegramId, sellerId));
-
-      // Mark all those listings as cancelled
-      const ids = listings.map((l) => l.id);
-      await tx
-        .update(marketListingsTable)
-        .set({ status: "cancelled" })
-        .where(inArray(marketListingsTable.id, ids));
     });
   }
 }
 
-function getItemInventory(farm: any, itemType: string, itemId: string): number {
+function getItemInventory(farm: { inventory: unknown; products: unknown; fishInventory: unknown }, itemType: string, itemId: string): number {
   if (itemType === "crop") return (farm.inventory as Record<string, number>)?.[itemId] ?? 0;
   if (itemType === "product") return (farm.products as Record<string, number>)?.[itemId] ?? 0;
   if (itemType === "fish") return (farm.fishInventory as Record<string, number>)?.[itemId] ?? 0;
   return 0;
 }
 
-function deductItemInventory(farm: any, itemType: string, itemId: string, qty: number) {
+function deductItemInventory(
+  farm: { inventory: unknown; products: unknown; fishInventory: unknown },
+  itemType: string,
+  itemId: string,
+  qty: number,
+): Partial<{ inventory: Record<string, number>; products: Record<string, number>; fishInventory: Record<string, number> }> {
   if (itemType === "crop") {
     const inv = { ...(farm.inventory as Record<string, number>) };
     inv[itemId] = (inv[itemId] ?? 0) - qty;
     return { inventory: inv };
   }
   if (itemType === "product") {
-    const prod = { ...(farm.products as Record<string, number>) };
-    prod[itemId] = (prod[itemId] ?? 0) - qty;
-    return { products: prod };
+    const p = { ...(farm.products as Record<string, number>) };
+    p[itemId] = (p[itemId] ?? 0) - qty;
+    return { products: p };
   }
   if (itemType === "fish") {
-    const fish = { ...(farm.fishInventory as Record<string, number> ?? {}) };
-    fish[itemId] = (fish[itemId] ?? 0) - qty;
-    return { fishInventory: fish };
+    const f = { ...(farm.fishInventory as Record<string, number> ?? {}) };
+    f[itemId] = (f[itemId] ?? 0) - qty;
+    return { fishInventory: f };
   }
   return {};
 }
 
-function addItemInventory(farm: any, itemType: string, itemId: string, qty: number) {
+function addItemInventory(
+  farm: { inventory: unknown; products: unknown; fishInventory: unknown },
+  itemType: string,
+  itemId: string,
+  qty: number,
+): Partial<{ inventory: Record<string, number>; products: Record<string, number>; fishInventory: Record<string, number> }> {
   if (itemType === "crop") {
     const inv = { ...(farm.inventory as Record<string, number>) };
     inv[itemId] = (inv[itemId] ?? 0) + qty;
     return { inventory: inv };
   }
   if (itemType === "product") {
-    const prod = { ...(farm.products as Record<string, number>) };
-    prod[itemId] = (prod[itemId] ?? 0) + qty;
-    return { products: prod };
+    const p = { ...(farm.products as Record<string, number>) };
+    p[itemId] = (p[itemId] ?? 0) + qty;
+    return { products: p };
   }
   if (itemType === "fish") {
-    const fish = { ...(farm.fishInventory as Record<string, number> ?? {}) };
-    fish[itemId] = (fish[itemId] ?? 0) + qty;
-    return { fishInventory: fish };
+    const f = { ...(farm.fishInventory as Record<string, number> ?? {}) };
+    f[itemId] = (f[itemId] ?? 0) + qty;
+    return { fishInventory: f };
   }
   return {};
 }
@@ -169,7 +191,6 @@ router.get("/listings", async (req, res) => {
     .limit(pageSize)
     .offset(offset);
 
-  // Enrich with seller name
   const sellerIds = [...new Set(listings.map(l => l.sellerId))];
   const sellers: Record<string, { username?: string | null; firstName?: string | null }> = {};
   if (sellerIds.length > 0) {
@@ -229,25 +250,27 @@ router.post("/listings", async (req, res) => {
     return res.status(400).json({ error: "Количество и цена должны быть > 0" });
   }
 
-  const result = await db.transaction(async (tx) => {
+  type CreateResult = TxResult<{ listing: typeof marketListingsTable.$inferSelect }>;
+
+  const result: CreateResult = await db.transaction(async (tx): Promise<CreateResult> => {
     const [farm] = await tx
       .select()
       .from(farmStateTable)
       .where(eq(farmStateTable.telegramId, me))
       .for("update");
-    if (!farm) return { error: "Ферма не найдена", status: 404 };
+    if (!farm) return errResult("Ферма не найдена", 404);
 
     const [countRow] = await tx
       .select({ cnt: sql<number>`count(*)` })
       .from(marketListingsTable)
       .where(and(eq(marketListingsTable.sellerId, me), eq(marketListingsTable.status, "active")));
     if (Number(countRow.cnt) >= MAX_ACTIVE_LISTINGS) {
-      return { error: `Максимум ${MAX_ACTIVE_LISTINGS} активных лотов`, status: 400 };
+      return errResult(`Максимум ${MAX_ACTIVE_LISTINGS} активных лотов`);
     }
 
     const have = getItemInventory(farm, itemType, itemId);
     if (have < quantity) {
-      return { error: `Недостаточно ${itemId} (есть: ${have})`, status: 400 };
+      return errResult(`Недостаточно ${itemId} (есть: ${have})`);
     }
 
     const deducted = deductItemInventory(farm, itemType, itemId, quantity);
@@ -267,8 +290,8 @@ router.post("/listings", async (req, res) => {
     return { ok: true, listing };
   });
 
-  if ("error" in result) return res.status((result as any).status ?? 400).json({ error: (result as any).error });
-  res.json(result);
+  if (!result.ok) return res.status(result.status).json({ error: result.error });
+  res.json({ ok: true, listing: result.listing });
 });
 
 // POST /api/market/listings/:id/buy
@@ -279,44 +302,47 @@ router.post("/listings/:id/buy", async (req, res) => {
   const id = parseInt(req.params.id);
   const { quantity } = req.body as { quantity?: number };
 
-  const result = await db.transaction(async (tx) => {
-    // Lock the listing row first
+  type BuyResult = TxResult<{
+    bought: number;
+    totalCost: number;
+    newInventory: Partial<{ inventory: Record<string, number>; products: Record<string, number>; fishInventory: Record<string, number> }>;
+  }>;
+
+  const result: BuyResult = await db.transaction(async (tx): Promise<BuyResult> => {
     const [listing] = await tx
       .select()
       .from(marketListingsTable)
       .where(eq(marketListingsTable.id, id))
       .for("update");
 
-    if (!listing) return { error: "Лот не найден", status: 404 };
-    if (listing.status !== "active") return { error: "Лот недоступен", status: 400 };
-    if (listing.sellerId === me) return { error: "Нельзя покупать собственный лот", status: 400 };
-    if (new Date() > new Date(listing.expiresAt)) return { error: "Лот истёк", status: 400 };
+    if (!listing) return errResult("Лот не найден", 404);
+    if (listing.status !== "active") return errResult("Лот недоступен");
+    if (listing.sellerId === me) return errResult("Нельзя покупать собственный лот");
+    if (new Date() > new Date(listing.expiresAt)) return errResult("Лот истёк");
 
     const buyQty = quantity && quantity > 0 && quantity <= listing.quantity ? quantity : listing.quantity;
     const totalCost = buyQty * listing.pricePerUnit;
 
-    // Lock buyer and seller rows
     const [buyerFarm] = await tx
       .select()
       .from(farmStateTable)
       .where(eq(farmStateTable.telegramId, me))
       .for("update");
-    if (!buyerFarm) return { error: "Ферма не найдена", status: 404 };
-    if (buyerFarm.coins < totalCost) return { error: `Недостаточно монет (нужно ${totalCost})`, status: 400 };
+    if (!buyerFarm) return errResult("Ферма не найдена", 404);
+    if (buyerFarm.coins < totalCost) return errResult(`Недостаточно монет (нужно ${totalCost})`);
 
     const [sellerFarm] = await tx
       .select()
       .from(farmStateTable)
       .where(eq(farmStateTable.telegramId, listing.sellerId))
       .for("update");
-    if (!sellerFarm) return { error: "Продавец не найден", status: 404 };
+    if (!sellerFarm) return errResult("Продавец не найден", 404);
 
     const buyerInventoryUpdate = addItemInventory(buyerFarm, listing.itemType, listing.itemId, buyQty);
 
     const newQty = listing.quantity - buyQty;
     const newStatus = newQty <= 0 ? "sold" : "active";
 
-    // Update buyer, seller, and listing in the same transaction
     await tx
       .update(farmStateTable)
       .set({ ...buyerInventoryUpdate, coins: buyerFarm.coins - totalCost, updatedAt: new Date() })
@@ -335,8 +361,8 @@ router.post("/listings/:id/buy", async (req, res) => {
     return { ok: true, bought: buyQty, totalCost, newInventory: buyerInventoryUpdate };
   });
 
-  if ("error" in result) return res.status((result as any).status ?? 400).json({ error: (result as any).error });
-  res.json(result);
+  if (!result.ok) return res.status(result.status).json({ error: result.error });
+  res.json({ ok: true, bought: result.bought, totalCost: result.totalCost, newInventory: result.newInventory });
 });
 
 // DELETE /api/market/listings/:id — cancel own listing
@@ -346,23 +372,25 @@ router.delete("/listings/:id", async (req, res) => {
 
   const id = parseInt(req.params.id);
 
-  const result = await db.transaction(async (tx) => {
+  type CancelResult = TxResult<Record<never, never>>;
+
+  const result: CancelResult = await db.transaction(async (tx): Promise<CancelResult> => {
     const [listing] = await tx
       .select()
       .from(marketListingsTable)
       .where(eq(marketListingsTable.id, id))
       .for("update");
 
-    if (!listing) return { error: "Лот не найден", status: 404 };
-    if (listing.sellerId !== me) return { error: "Нет доступа", status: 403 };
-    if (listing.status !== "active") return { error: "Лот уже закрыт", status: 400 };
+    if (!listing) return errResult("Лот не найден", 404);
+    if (listing.sellerId !== me) return errResult("Нет доступа", 403);
+    if (listing.status !== "active") return errResult("Лот уже закрыт");
 
     const [farm] = await tx
       .select()
       .from(farmStateTable)
       .where(eq(farmStateTable.telegramId, me))
       .for("update");
-    if (!farm) return { error: "Ферма не найдена", status: 404 };
+    if (!farm) return errResult("Ферма не найдена", 404);
 
     const restored = addItemInventory(farm, listing.itemType, listing.itemId, listing.quantity);
 
@@ -372,8 +400,8 @@ router.delete("/listings/:id", async (req, res) => {
     return { ok: true };
   });
 
-  if ("error" in result) return res.status((result as any).status ?? 400).json({ error: (result as any).error });
-  res.json(result);
+  if (!result.ok) return res.status(result.status).json({ error: result.error });
+  res.json({ ok: true });
 });
 
 export default router;

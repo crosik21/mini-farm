@@ -1,8 +1,8 @@
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { Home, ShoppingBag, User, Shield, Users, Package } from "lucide-react";
+import { Home, ShoppingBag, User, Shield, Users, Package, Fish, Store } from "lucide-react";
 
-export type Tab = "farm" | "shop" | "friends" | "cases" | "profile" | "admin";
+export type Tab = "farm" | "shop" | "fishing" | "marketplace" | "friends" | "cases" | "profile" | "admin";
 
 const ADMIN_TELEGRAM_ID = "1335699132";
 
@@ -34,35 +34,40 @@ export function BottomNav({ activeTab, onTabChange, shopBadge, profileBadge, tel
     {
       id: "farm",
       label: "Ферма",
-      icon: (active) => <Home size={22} strokeWidth={active ? 2.5 : 1.7} />,
+      icon: (active) => <Home size={20} strokeWidth={active ? 2.5 : 1.7} />,
     },
     {
       id: "shop",
-      label: "Рынок",
-      icon: (active) => <ShoppingBag size={22} strokeWidth={active ? 2.5 : 1.7} />,
+      label: "Магазин",
+      icon: (active) => <ShoppingBag size={20} strokeWidth={active ? 2.5 : 1.7} />,
       badge: shopBadge,
+    },
+    {
+      id: "fishing",
+      label: "Рыбалка",
+      icon: (active) => <Fish size={20} strokeWidth={active ? 2.5 : 1.7} />,
+    },
+    {
+      id: "marketplace",
+      label: "Рынок",
+      icon: (active) => <Store size={20} strokeWidth={active ? 2.5 : 1.7} />,
     },
     {
       id: "friends",
       label: "Друзья",
-      icon: (active) => <Users size={22} strokeWidth={active ? 2.5 : 1.7} />,
-    },
-    {
-      id: "cases",
-      label: "Кейсы",
-      icon: (active) => <Package size={22} strokeWidth={active ? 2.5 : 1.7} />,
+      icon: (active) => <Users size={20} strokeWidth={active ? 2.5 : 1.7} />,
     },
     {
       id: "profile",
       label: "Профиль",
-      icon: (active) => <User size={22} strokeWidth={active ? 2.5 : 1.7} />,
+      icon: (active) => <User size={20} strokeWidth={active ? 2.5 : 1.7} />,
       badge: profileBadge,
     },
     ...(isAdmin
       ? [{
           id: "admin" as Tab,
           label: "Админ",
-          icon: (active: boolean) => <Shield size={22} strokeWidth={active ? 2.5 : 1.7} />,
+          icon: (active: boolean) => <Shield size={20} strokeWidth={active ? 2.5 : 1.7} />,
           isAdmin: true,
         }]
       : []),

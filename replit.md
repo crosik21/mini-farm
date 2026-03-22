@@ -91,6 +91,26 @@ Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used b
 
 Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
 
+### `artifacts/mini-farm` (`@workspace/mini-farm`)
+
+React + Vite Telegram Mini App — "Мини-Ферма" farm game.
+
+**Features (Tasks 1-3):**
+- Task 1: Login streak rewards (7-day), achievements system with categories and claim UI
+- Task 2: Weather system (sunny/rainy/storm with growth multipliers), storm spoil/potent mechanics, barn shelter building, seasonal events with event crops and event coin shop
+- Task 3: Fishing mini-game (cast rod, countdown timer, collect catch, sell fish), player marketplace (list/buy/cancel listings), fish recipes in kitchen (fish_soup from carp+milk, grilled_fish from salmon)
+
+**DB Tables:** farm_states, friendships, referrals, trade_offers, shop_purchases, daily_gifts, promocodes, promocode_uses, achievements, fishing_sessions, market_listings
+
+**Routes:**
+- `/api/farm/:id` — main farm state GET + POST actions
+- `/api/fishing/status|start|collect|sell` — fishing mini-game
+- `/api/market/listings`, `/api/market/my-listings`, `/api/market/listings/:id/buy`, DELETE — player marketplace
+- `/api/social/*` — friends, trades, leaderboard, gifts
+- `/api/admin/*` — admin controls (weather, events, shop)
+
+**Navigation (BottomNav):** farm, shop (магазин), fishing (рыбалка), marketplace (рынок), friends, profile, admin (admin only)
+
 ### `scripts` (`@workspace/scripts`)
 
 Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.

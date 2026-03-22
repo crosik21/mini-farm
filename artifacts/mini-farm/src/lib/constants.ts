@@ -93,6 +93,8 @@ export const RECIPES: Record<string, RecipeConfig> = {
   bacon:        { id: "bacon",        name: "Бекон",              building: "kitchen", inputs: [{ itemId: "meat",        quantity: 1 }],                                                    outputId: "bacon",        outputQty: 1, craftSec: 180,  sellPrice: 220  },
   honey_bread:  { id: "honey_bread",  name: "Медовый хлеб",       building: "kitchen", inputs: [{ itemId: "honey",       quantity: 1 }, { itemId: "flour",    quantity: 1 }],              outputId: "honey_bread",  outputQty: 1, craftSec: 300,  sellPrice: 400  },
   roast:        { id: "roast",        name: "Жаркое",             building: "kitchen", inputs: [{ itemId: "meat",        quantity: 1 }, { itemId: "mushroom", quantity: 1 }],              outputId: "roast",        outputQty: 1, craftSec: 480,  sellPrice: 600  },
+  fish_soup:    { id: "fish_soup",    name: "Рыбный суп",         building: "kitchen", inputs: [{ itemId: "carp",        quantity: 1 }, { itemId: "milk",     quantity: 1 }],              outputId: "fish_soup",    outputQty: 1, craftSec: 360,  sellPrice: 280  },
+  grilled_fish: { id: "grilled_fish", name: "Жареная рыба",       building: "kitchen", inputs: [{ itemId: "salmon",      quantity: 1 }],                                                    outputId: "grilled_fish", outputQty: 1, craftSec: 300,  sellPrice: 420  },
 };
 
 export const PRODUCTS: Record<string, { name: string; emoji: string; sellPrice: number }> = {
@@ -226,6 +228,14 @@ export const CASE_RARITY_COLORS: Record<CaseRarity, { text: string; bg: string; 
   legendary: { text: "text-amber-600",  bg: "bg-amber-50",  border: "border-amber-300",  glow: "rgba(245,158,11,0.5)"  },
 };
 
+export const FISH_META: Record<string, { name: string; emoji: string; sellPrice: number }> = {
+  bass:           { name: "Окунь",           emoji: "🐟", sellPrice: 25  },
+  carp:           { name: "Карп",            emoji: "🐠", sellPrice: 40  },
+  pike:           { name: "Щука",            emoji: "🐡", sellPrice: 70  },
+  salmon:         { name: "Лосось",          emoji: "🐟", sellPrice: 120 },
+  legendary_fish: { name: "Легендарная рыба",emoji: "✨", sellPrice: 500 },
+};
+
 export const ITEM_NAMES: Record<string, string> = {
   wheat: "Пшеница", carrot: "Морковь", tomato: "Помидор", corn: "Кукуруза",
   strawberry: "Клубника", sunflower: "Подсолнух", pumpkin: "Тыква",
@@ -240,6 +250,10 @@ export const ITEM_NAMES: Record<string, string> = {
   // Эксклюзивные из кейсов
   dragon_fruit: "Драконий плод", starfruit: "Карамбола", moonberry: "Лунная ягода",
   lucky_clover: "Клевер удачи", rainbow_corn: "Радужная кукуруза",
+  // Рыба
+  bass: "Окунь", carp: "Карп", pike: "Щука", salmon: "Лосось", legendary_fish: "Легендарная рыба",
+  // Рыбные блюда
+  fish_soup: "Рыбный суп", grilled_fish: "Жареная рыба",
 };
 
 export const ITEM_EMOJIS: Record<string, string> = {
@@ -255,6 +269,10 @@ export const ITEM_EMOJIS: Record<string, string> = {
   // Эксклюзивные из кейсов
   dragon_fruit: "🐲", starfruit: "⭐", moonberry: "🌙",
   lucky_clover: "🍀", rainbow_corn: "🌈",
+  // Рыба
+  bass: "🐟", carp: "🐠", pike: "🐡", salmon: "🐟", legendary_fish: "✨",
+  // Рыбные блюда
+  fish_soup: "🍲", grilled_fish: "🐟",
 };
 
 export const SEASON_CONFIG: Record<string, { name: string; emoji: string; color: string; bgColor: string }> = {

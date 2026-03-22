@@ -281,9 +281,20 @@ const TOOL_TIER_CONFIG: Record<"watering_can" | "sprinkler", ToolTierDef[]> = {
 
 // ─────────────────────────────── Farm Pass Config ─────────────────────────────
 
-const PASS_SEASON_ID = "season_1";
-const PASS_SEASON_START = new Date("2026-03-01T00:00:00Z");
-const PASS_SEASON_END   = new Date("2026-03-31T23:59:59Z");
+const PASS_SEASON_DURATION_DAYS = 30;
+const PASS_EPOCH = new Date("2026-03-01T00:00:00Z"); // First season start
+
+function getCurrentPassSeason(): { seasonId: string; seasonStart: Date; seasonEnd: Date } {
+  const now = Date.now();
+  const epochMs = PASS_EPOCH.getTime();
+  const durationMs = PASS_SEASON_DURATION_DAYS * 24 * 60 * 60 * 1000;
+  const seasonIndex = Math.max(0, Math.floor((now - epochMs) / durationMs));
+  const seasonId = `season_${seasonIndex + 1}`;
+  const seasonStart = new Date(epochMs + seasonIndex * durationMs);
+  const seasonEnd = new Date(epochMs + (seasonIndex + 1) * durationMs - 1);
+  return { seasonId, seasonStart, seasonEnd };
+}
+
 const PASS_XP_PER_LEVEL = 50;
 const PASS_MAX_LEVEL = 20;
 
@@ -301,27 +312,28 @@ type PassLevelReward = {
   premium: PassReward;
 };
 
+// Free track: coins only. Premium track: gems + rare seeds + pet at level 20.
 const PASS_REWARDS: PassLevelReward[] = [
-  { level: 1,  free: { type: "coins", amount: 50  },                          premium: { type: "gems",  amount: 1  } },
-  { level: 2,  free: { type: "seeds", seedType: "wheat",      seedQty: 5  },  premium: { type: "seeds", seedType: "strawberry", seedQty: 3 } },
-  { level: 3,  free: { type: "coins", amount: 100 },                          premium: { type: "gems",  amount: 2  } },
-  { level: 4,  free: { type: "seeds", seedType: "carrot",     seedQty: 5  },  premium: { type: "seeds", seedType: "corn",       seedQty: 5 } },
-  { level: 5,  free: { type: "gems",  amount: 1   },                          premium: { type: "gems",  amount: 3  } },
-  { level: 6,  free: { type: "coins", amount: 150 },                          premium: { type: "seeds", seedType: "pumpkin",    seedQty: 3 } },
-  { level: 7,  free: { type: "seeds", seedType: "tomato",     seedQty: 5  },  premium: { type: "gems",  amount: 3  } },
-  { level: 8,  free: { type: "coins", amount: 200 },                          premium: { type: "seeds", seedType: "pumpkin",    seedQty: 5 } },
-  { level: 9,  free: { type: "seeds", seedType: "corn",       seedQty: 5  },  premium: { type: "gems",  amount: 5  } },
-  { level: 10, free: { type: "gems",  amount: 3   },                          premium: { type: "gems",  amount: 5  } },
-  { level: 11, free: { type: "coins", amount: 250 },                          premium: { type: "gems",  amount: 3  } },
-  { level: 12, free: { type: "seeds", seedType: "strawberry", seedQty: 3  },  premium: { type: "seeds", seedType: "sunflower",  seedQty: 5 } },
-  { level: 13, free: { type: "coins", amount: 300 },                          premium: { type: "gems",  amount: 5  } },
-  { level: 14, free: { type: "seeds", seedType: "sunflower",  seedQty: 3  },  premium: { type: "seeds", seedType: "strawberry", seedQty: 5 } },
-  { level: 15, free: { type: "gems",  amount: 5   },                          premium: { type: "gems",  amount: 10 } },
-  { level: 16, free: { type: "coins", amount: 350 },                          premium: { type: "seeds", seedType: "pumpkin",    seedQty: 5 } },
-  { level: 17, free: { type: "seeds", seedType: "corn",       seedQty: 5  },  premium: { type: "gems",  amount: 5  } },
-  { level: 18, free: { type: "coins", amount: 400 },                          premium: { type: "seeds", seedType: "sunflower",  seedQty: 5 } },
-  { level: 19, free: { type: "coins", amount: 500 },                          premium: { type: "gems",  amount: 10 } },
-  { level: 20, free: { type: "coins", amount: 1000 },                         premium: { type: "pet",   petType: "unicorn" } },
+  { level: 1,  free: { type: "coins", amount: 50   }, premium: { type: "gems",  amount: 2  } },
+  { level: 2,  free: { type: "coins", amount: 75   }, premium: { type: "seeds", seedType: "rainbow_corn",  seedQty: 2 } },
+  { level: 3,  free: { type: "coins", amount: 100  }, premium: { type: "gems",  amount: 3  } },
+  { level: 4,  free: { type: "coins", amount: 125  }, premium: { type: "seeds", seedType: "lucky_clover",  seedQty: 2 } },
+  { level: 5,  free: { type: "coins", amount: 150  }, premium: { type: "gems",  amount: 5  } },
+  { level: 6,  free: { type: "coins", amount: 175  }, premium: { type: "seeds", seedType: "rainbow_corn",  seedQty: 3 } },
+  { level: 7,  free: { type: "coins", amount: 200  }, premium: { type: "gems",  amount: 5  } },
+  { level: 8,  free: { type: "coins", amount: 225  }, premium: { type: "seeds", seedType: "moonberry",     seedQty: 1 } },
+  { level: 9,  free: { type: "coins", amount: 250  }, premium: { type: "gems",  amount: 7  } },
+  { level: 10, free: { type: "coins", amount: 300  }, premium: { type: "seeds", seedType: "lucky_clover",  seedQty: 3 } },
+  { level: 11, free: { type: "coins", amount: 325  }, premium: { type: "gems",  amount: 7  } },
+  { level: 12, free: { type: "coins", amount: 350  }, premium: { type: "seeds", seedType: "moonberry",     seedQty: 2 } },
+  { level: 13, free: { type: "coins", amount: 400  }, premium: { type: "gems",  amount: 10 } },
+  { level: 14, free: { type: "coins", amount: 450  }, premium: { type: "seeds", seedType: "starfruit",     seedQty: 1 } },
+  { level: 15, free: { type: "coins", amount: 500  }, premium: { type: "gems",  amount: 10 } },
+  { level: 16, free: { type: "coins", amount: 550  }, premium: { type: "seeds", seedType: "starfruit",     seedQty: 2 } },
+  { level: 17, free: { type: "coins", amount: 600  }, premium: { type: "gems",  amount: 15 } },
+  { level: 18, free: { type: "coins", amount: 700  }, premium: { type: "seeds", seedType: "dragon_fruit",  seedQty: 1 } },
+  { level: 19, free: { type: "coins", amount: 850  }, premium: { type: "gems",  amount: 20 } },
+  { level: 20, free: { type: "coins", amount: 1000 }, premium: { type: "pet",   petType: "unicorn" } },
 ];
 
 function getPassLevelFromXp(xp: number): number {
@@ -329,16 +341,17 @@ function getPassLevelFromXp(xp: number): number {
 }
 
 async function getOrCreateFarmPass(telegramId: string): Promise<FarmPass> {
+  const { seasonId } = getCurrentPassSeason();
   const existing = await db
     .select()
     .from(farmPassTable)
-    .where(and(eq(farmPassTable.telegramId, telegramId), eq(farmPassTable.passSeasonId, PASS_SEASON_ID)))
+    .where(and(eq(farmPassTable.telegramId, telegramId), eq(farmPassTable.passSeasonId, seasonId)))
     .limit(1);
   if (existing.length > 0) return existing[0];
 
   const inserted = await db.insert(farmPassTable).values({
     telegramId,
-    passSeasonId: PASS_SEASON_ID,
+    passSeasonId: seasonId,
     xp: 0,
     level: 1,
     freeTrackClaimed: [],
@@ -349,6 +362,7 @@ async function getOrCreateFarmPass(telegramId: string): Promise<FarmPass> {
 }
 
 function serializeFarmPass(pass: FarmPass) {
+  const { seasonStart, seasonEnd } = getCurrentPassSeason();
   return {
     seasonId: pass.passSeasonId,
     xp: pass.xp,
@@ -359,8 +373,8 @@ function serializeFarmPass(pass: FarmPass) {
     rewards: PASS_REWARDS,
     xpPerLevel: PASS_XP_PER_LEVEL,
     maxLevel: PASS_MAX_LEVEL,
-    seasonStartAt: PASS_SEASON_START.toISOString(),
-    seasonEndAt: PASS_SEASON_END.toISOString(),
+    seasonStartAt: seasonStart.toISOString(),
+    seasonEndAt: seasonEnd.toISOString(),
   };
 }
 
@@ -374,12 +388,15 @@ const PASS_XP_ACTIONS: Record<string, number> = {
 async function addPassXp(telegramId: string, actionType: string): Promise<void> {
   const xpGain = PASS_XP_ACTIONS[actionType];
   if (!xpGain) return;
+  const { seasonId, seasonEnd } = getCurrentPassSeason();
+  // No XP after season ends
+  if (Date.now() > seasonEnd.getTime()) return;
   const pass = await getOrCreateFarmPass(telegramId);
   const newXp = pass.xp + xpGain;
   const newLevel = getPassLevelFromXp(newXp);
   await db.update(farmPassTable)
     .set({ xp: newXp, level: newLevel, updatedAt: new Date() })
-    .where(and(eq(farmPassTable.telegramId, telegramId), eq(farmPassTable.passSeasonId, PASS_SEASON_ID)));
+    .where(and(eq(farmPassTable.telegramId, telegramId), eq(farmPassTable.passSeasonId, seasonId)));
 }
 
 // ─────────────────────────────── Rotating Seed Shop ───────────────────────────
@@ -2049,11 +2066,14 @@ router.post("/:telegramId/action", async (req, res) => {
       const PREMIUM_PASS_COST_GEMS = 99;
       if (gems < PREMIUM_PASS_COST_GEMS) return res.status(400).json({ error: `Нужно ${PREMIUM_PASS_COST_GEMS} 💎 кристаллов` });
 
+      const { seasonId: curSeasonId, seasonEnd: curSeasonEnd } = getCurrentPassSeason();
+      if (Date.now() > curSeasonEnd.getTime()) return res.status(400).json({ error: "Сезон завершён, ждите следующего" });
+
       const passResult = await db.transaction(async (tx) => {
         const [existingPass] = await tx
           .select()
           .from(farmPassTable)
-          .where(and(eq(farmPassTable.telegramId, telegramId), eq(farmPassTable.passSeasonId, PASS_SEASON_ID)));
+          .where(and(eq(farmPassTable.telegramId, telegramId), eq(farmPassTable.passSeasonId, curSeasonId)));
         if (existingPass?.isPremium) return { status: "already_premium" as const };
 
         if (existingPass) {
@@ -2062,7 +2082,7 @@ router.post("/:telegramId/action", async (req, res) => {
             .where(eq(farmPassTable.id, existingPass.id));
         } else {
           await tx.insert(farmPassTable).values({
-            telegramId, passSeasonId: PASS_SEASON_ID, xp: 0, level: 1,
+            telegramId, passSeasonId: curSeasonId, xp: 0, level: 1,
             freeTrackClaimed: [], premiumTrackClaimed: [], isPremium: true,
           });
         }
@@ -2092,11 +2112,13 @@ router.post("/:telegramId/action", async (req, res) => {
       const reward = PASS_REWARDS.find((r) => r.level === passLevel);
       if (!reward) return res.status(400).json({ error: "Награда не найдена" });
 
+      const { seasonId: claimSeasonId } = getCurrentPassSeason();
+
       const passClaimResult = await db.transaction(async (tx) => {
         const [pass] = await tx
           .select()
           .from(farmPassTable)
-          .where(and(eq(farmPassTable.telegramId, telegramId), eq(farmPassTable.passSeasonId, PASS_SEASON_ID)));
+          .where(and(eq(farmPassTable.telegramId, telegramId), eq(farmPassTable.passSeasonId, claimSeasonId)));
 
         if (!pass) return { status: "no_pass" as const };
         if (pass.level < passLevel) return { status: "not_reached" as const };
@@ -2136,8 +2158,9 @@ router.post("/:telegramId/action", async (req, res) => {
         seeds[rewardDef.seedType as keyof CropInventory] = ((seeds[rewardDef.seedType as keyof CropInventory] as number) ?? 0) + rewardDef.seedQty;
       }
       if (rewardDef.type === "pet") {
-        // Unicorn pet reward — grant gems as bonus
-        gems += 20;
+        // Unicorn pet reward — grant 1 dragon_fruit seed + 30 gems as exclusive bonus
+        seeds["dragon_fruit" as keyof CropInventory] = ((seeds["dragon_fruit" as keyof CropInventory] as number) ?? 0) + 1;
+        gems += 30;
       }
 
       worlds[activeWorldId] = { ...(worlds[activeWorldId] || { unlocked: true }), plots };

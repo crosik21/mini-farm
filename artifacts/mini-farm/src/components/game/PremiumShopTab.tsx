@@ -218,7 +218,7 @@ export function PremiumShopTab({ farm, onActivateItem }: PremiumShopTabProps) {
           setFeedback({ msg: `Куплено! ✓`, ok: true });
           setTimeout(() => setFeedback(null), 2000);
         },
-        onError: (e: any) => {
+        onError: (e: Error) => {
           setFeedback({ msg: e?.message || "Ошибка", ok: false });
           setTimeout(() => setFeedback(null), 2500);
         },
@@ -235,7 +235,7 @@ export function PremiumShopTab({ farm, onActivateItem }: PremiumShopTabProps) {
           setFeedback({ msg: "Инструмент улучшен! ✓", ok: true });
           setTimeout(() => setFeedback(null), 2000);
         },
-        onError: (e: any) => {
+        onError: (e: Error) => {
           setConfirmUpgrade(null);
           setFeedback({ msg: e?.message || "Ошибка", ok: false });
           setTimeout(() => setFeedback(null), 2500);

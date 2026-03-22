@@ -10,6 +10,7 @@ interface BottomNavProps {
   activeTab: Tab;
   onTabChange: (tab: Tab) => void;
   shopBadge?: number;
+  profileBadge?: number;
   telegramId?: string;
 }
 
@@ -26,7 +27,7 @@ const TAB_COLORS = {
   },
 };
 
-export function BottomNav({ activeTab, onTabChange, shopBadge, telegramId }: BottomNavProps) {
+export function BottomNav({ activeTab, onTabChange, shopBadge, profileBadge, telegramId }: BottomNavProps) {
   const isAdmin = telegramId === ADMIN_TELEGRAM_ID;
 
   const tabs: { id: Tab; label: string; icon: (active: boolean) => React.ReactNode; badge?: number; isAdmin?: boolean }[] = [
@@ -55,6 +56,7 @@ export function BottomNav({ activeTab, onTabChange, shopBadge, telegramId }: Bot
       id: "profile",
       label: "Профиль",
       icon: (active) => <User size={22} strokeWidth={active ? 2.5 : 1.7} />,
+      badge: profileBadge,
     },
     ...(isAdmin
       ? [{

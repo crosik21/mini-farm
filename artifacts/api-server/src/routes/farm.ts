@@ -6,6 +6,7 @@ import {
   promocodesTable,
   promocodeUsesTable,
   referralsTable,
+  achievementsTable,
   type PlotState,
   type CropInventory,
   type AnimalState,
@@ -18,6 +19,7 @@ import {
   type ActiveSprinkler,
   type WorldId,
   type WorldsData,
+  type Achievement,
 } from "@workspace/db";
 import { eq, and, inArray, sql } from "drizzle-orm";
 import { getAdminConfig, DEFAULT_SHOP_GLOBAL } from "../admin-config";
@@ -591,6 +593,191 @@ function getTodayDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+// ─────────────────────────────── Login Streak ─────────────────────────────────
+
+export type StreakReward = {
+  day: number;
+  label: string;
+  type: "coins" | "gems" | "seed" | "animal";
+  coins?: number;
+  gems?: number;
+  seedType?: string;
+  seedQty?: number;
+  animalType?: string;
+};
+
+export const STREAK_REWARDS: StreakReward[] = [
+  { day: 1, label: "50 монет",         type: "coins", coins: 50 },
+  { day: 2, label: "100 монет",        type: "coins", coins: 100 },
+  { day: 3, label: "2 семени кукурузы",type: "seed",  seedType: "corn",       seedQty: 2 },
+  { day: 4, label: "200 монет + 1 💎",  type: "coins", coins: 200, gems: 1 },
+  { day: 5, label: "2 семени клубники",type: "seed",  seedType: "strawberry", seedQty: 2 },
+  { day: 6, label: "2 кристалла",      type: "gems",  gems: 2 },
+  { day: 7, label: "Курица + 300 монет",type: "animal",animalType: "chicken", coins: 300 },
+];
+
+function applyStreakReward(farm: any, reward: StreakReward) {
+  const seeds = { ...(farm.seeds as CropInventory) };
+  let coins = farm.coins;
+  let gems = farm.gems;
+  let animals: AnimalState[] = [...(farm.animals as AnimalState[])];
+
+  if (reward.coins) coins += reward.coins;
+  if (reward.gems) gems += reward.gems;
+  if (reward.seedType && reward.seedQty) {
+    seeds[reward.seedType as keyof CropInventory] = ((seeds[reward.seedType as keyof CropInventory] as number) ?? 0) + reward.seedQty;
+  }
+  if (reward.animalType) {
+    const animalCfg = ANIMAL_CONFIG[reward.animalType];
+    if (animalCfg) {
+      const newAnimal: AnimalState = {
+        id: Date.now(),
+        type: reward.animalType as AnimalState["type"],
+        name: reward.animalType === "chicken" ? "Пеструшка" : reward.animalType,
+        fed: false,
+        lastFedAt: null,
+        productReadyAt: null,
+        status: "hungry",
+        level: 1,
+      };
+      animals = [...animals, newAnimal];
+    }
+  }
+
+  return { coins, gems, seeds, animals };
+}
+
+// ─────────────────────────────── Achievements ─────────────────────────────────
+
+export type AchievementDef = {
+  id: string;
+  emoji: string;
+  title: string;
+  description: string;
+  goal: number;
+  category: "harvest" | "coins" | "animals" | "buildings" | "level" | "quests" | "trading" | "worlds" | "streak" | "crafting";
+  trackAction: string;
+  rewardCoins: number;
+  rewardGems: number;
+  rewardSeedType?: string;
+  rewardSeedQty?: number;
+};
+
+export const ACHIEVEMENT_DEFS: AchievementDef[] = [
+  // ── Урожай ──────────────────────────────────────────────────────────────────
+  { id: "harvest_10",    emoji: "🌾", title: "Первый урожай",     description: "Собери 10 раз урожай",      goal: 10,   category: "harvest",   trackAction: "harvest", rewardCoins: 50,   rewardGems: 0 },
+  { id: "harvest_50",    emoji: "🌾", title: "Заядлый фермер",    description: "Собери 50 раз урожай",      goal: 50,   category: "harvest",   trackAction: "harvest", rewardCoins: 150,  rewardGems: 1 },
+  { id: "harvest_200",   emoji: "🌾", title: "Мастер жатвы",      description: "Собери 200 раз урожай",     goal: 200,  category: "harvest",   trackAction: "harvest", rewardCoins: 400,  rewardGems: 2 },
+  { id: "harvest_1000",  emoji: "🏆", title: "Легенда жатвы",     description: "Собери 1000 раз урожай",    goal: 1000, category: "harvest",   trackAction: "harvest", rewardCoins: 1000, rewardGems: 5 },
+  // ── Монеты ──────────────────────────────────────────────────────────────────
+  { id: "coins_500",     emoji: "🪙", title: "Первые сбережения", description: "Заработай 500 монет",       goal: 500,  category: "coins",     trackAction: "earn_coins", rewardCoins: 50,  rewardGems: 0 },
+  { id: "coins_2000",    emoji: "💰", title: "Богатый фермер",    description: "Заработай 2000 монет",      goal: 2000, category: "coins",     trackAction: "earn_coins", rewardCoins: 200, rewardGems: 1 },
+  { id: "coins_10000",   emoji: "💰", title: "Фермер-миллионер", description: "Заработай 10000 монет",     goal: 10000,category: "coins",     trackAction: "earn_coins", rewardCoins: 500, rewardGems: 3 },
+  // ── Животные ────────────────────────────────────────────────────────────────
+  { id: "first_animal",  emoji: "🐾", title: "Зоофермер",         description: "Купи первое животное",      goal: 1,    category: "animals",   trackAction: "buy_animal", rewardCoins: 100, rewardGems: 0 },
+  { id: "animals_3",     emoji: "🐄", title: "Мини-зоопарк",      description: "Вырасти 3 животных",        goal: 3,    category: "animals",   trackAction: "buy_animal", rewardCoins: 200, rewardGems: 1 },
+  { id: "animals_5",     emoji: "🐑", title: "Большой зоопарк",   description: "Вырасти 5 животных",        goal: 5,    category: "animals",   trackAction: "buy_animal", rewardCoins: 400, rewardGems: 2 },
+  // ── Здания ──────────────────────────────────────────────────────────────────
+  { id: "first_building",emoji: "🏭", title: "Строитель",         description: "Построй первое здание",     goal: 1,    category: "buildings", trackAction: "build_building", rewardCoins: 150, rewardGems: 0 },
+  { id: "buildings_3",   emoji: "🏗️", title: "Промышленник",      description: "Построй 3 здания",          goal: 3,    category: "buildings", trackAction: "build_building", rewardCoins: 300, rewardGems: 2 },
+  // ── Уровень ─────────────────────────────────────────────────────────────────
+  { id: "level_3",       emoji: "⭐", title: "Начинающий",         description: "Достигни 3 уровня",         goal: 3,    category: "level",     trackAction: "level_up", rewardCoins: 100, rewardGems: 0 },
+  { id: "level_5",       emoji: "🌟", title: "Опытный",            description: "Достигни 5 уровня",         goal: 5,    category: "level",     trackAction: "level_up", rewardCoins: 200, rewardGems: 1 },
+  { id: "level_7",       emoji: "✨", title: "Ветеран",            description: "Достигни 7 уровня",         goal: 7,    category: "level",     trackAction: "level_up", rewardCoins: 300, rewardGems: 2 },
+  { id: "level_10",      emoji: "👑", title: "Великий фермер",    description: "Достигни 10 уровня",        goal: 10,   category: "level",     trackAction: "level_up", rewardCoins: 500, rewardGems: 5 },
+  // ── Квесты ──────────────────────────────────────────────────────────────────
+  { id: "quests_5",      emoji: "📋", title: "Добросовестный",    description: "Выполни 5 заданий",         goal: 5,    category: "quests",    trackAction: "claim_quest", rewardCoins: 100, rewardGems: 0 },
+  { id: "quests_20",     emoji: "📜", title: "Исполнитель",       description: "Выполни 20 заданий",        goal: 20,   category: "quests",    trackAction: "claim_quest", rewardCoins: 250, rewardGems: 2 },
+  // ── Стрик ───────────────────────────────────────────────────────────────────
+  { id: "streak_3",      emoji: "🔥", title: "На волне",          description: "3 дня подряд входи в игру", goal: 3,    category: "streak",    trackAction: "login_streak", rewardCoins: 100, rewardGems: 0 },
+  { id: "streak_7",      emoji: "🔥", title: "Недельный стрик",   description: "7 дней подряд входи в игру",goal: 7,    category: "streak",    trackAction: "login_streak", rewardCoins: 250, rewardGems: 2 },
+  // ── Миры ────────────────────────────────────────────────────────────────────
+  { id: "unlock_world",  emoji: "🌍", title: "Путешественник",    description: "Разблокируй другой мир",    goal: 1,    category: "worlds",    trackAction: "unlock_world", rewardCoins: 200, rewardGems: 1 },
+  // ── Крафт ───────────────────────────────────────────────────────────────────
+  { id: "craft_5",       emoji: "⚙️", title: "Ремесленник",       description: "Соберй 5 крафт-предметов",  goal: 5,    category: "crafting",  trackAction: "collect_craft", rewardCoins: 150, rewardGems: 1 },
+];
+
+async function getPlayerAchievements(telegramId: string): Promise<Achievement[]> {
+  return db.select().from(achievementsTable).where(eq(achievementsTable.telegramId, telegramId));
+}
+
+async function updateAchievementProgress(telegramId: string, trackAction: string, amount: number): Promise<void> {
+  const defs = ACHIEVEMENT_DEFS.filter((d) => d.trackAction === trackAction);
+  if (defs.length === 0) return;
+
+  const existing = await db
+    .select()
+    .from(achievementsTable)
+    .where(
+      and(
+        eq(achievementsTable.telegramId, telegramId),
+        inArray(achievementsTable.achievementId, defs.map((d) => d.id))
+      )
+    );
+
+  const existingMap = new Map(existing.map((e) => [e.achievementId, e]));
+
+  for (const def of defs) {
+    const current = existingMap.get(def.id);
+    if (current) {
+      if (current.claimed) continue;
+      const newProgress = Math.min(def.goal, current.progress + amount);
+      if (newProgress !== current.progress) {
+        await db
+          .update(achievementsTable)
+          .set({ progress: newProgress, updatedAt: new Date() })
+          .where(eq(achievementsTable.id, current.id));
+      }
+    } else {
+      const newProgress = Math.min(def.goal, amount);
+      await db.insert(achievementsTable).values({
+        telegramId,
+        achievementId: def.id,
+        progress: newProgress,
+        claimed: 0,
+      });
+    }
+  }
+}
+
+async function setAchievementAbsolute(telegramId: string, trackAction: string, absoluteValue: number): Promise<void> {
+  const defs = ACHIEVEMENT_DEFS.filter((d) => d.trackAction === trackAction);
+  if (defs.length === 0) return;
+
+  const existing = await db
+    .select()
+    .from(achievementsTable)
+    .where(
+      and(
+        eq(achievementsTable.telegramId, telegramId),
+        inArray(achievementsTable.achievementId, defs.map((d) => d.id))
+      )
+    );
+
+  const existingMap = new Map(existing.map((e) => [e.achievementId, e]));
+
+  for (const def of defs) {
+    const current = existingMap.get(def.id);
+    const newProgress = Math.min(def.goal, absoluteValue);
+    if (current) {
+      if (current.claimed) continue;
+      if (newProgress !== current.progress) {
+        await db
+          .update(achievementsTable)
+          .set({ progress: newProgress, updatedAt: new Date() })
+          .where(eq(achievementsTable.id, current.id));
+      }
+    } else {
+      await db.insert(achievementsTable).values({
+        telegramId,
+        achievementId: def.id,
+        progress: newProgress,
+        claimed: 0,
+      });
+    }
+  }
+}
+
 // ─────────────────────────────── Helper Functions ─────────────────────────────
 
 function getLevelFromXp(xp: number): number {
@@ -715,6 +902,36 @@ async function getOrCreateFarm(telegramId: string) {
       npcOrders = generateNpcOrders(farm.level);
     }
 
+    // ── Login Streak logic ───────────────────────────────────────────────────
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().slice(0, 10);
+    const lastLogin = farm.lastLoginDate || "";
+    let loginStreak = farm.loginStreak || 0;
+    let streakRewardDay = farm.streakRewardDay || 0;
+
+    if (lastLogin !== today) {
+      if (lastLogin === yesterdayStr) {
+        loginStreak = loginStreak + 1;
+      } else if (lastLogin !== "") {
+        loginStreak = 1;
+      } else {
+        loginStreak = 1;
+      }
+      // Cap at 7 for reward cycle
+      const cycleDay = ((loginStreak - 1) % 7) + 1;
+      streakRewardDay = cycleDay;
+      // Update streak in DB immediately
+      await db.update(farmStateTable).set({
+        loginStreak,
+        lastLoginDate: today,
+        streakRewardDay,
+        updatedAt: new Date(),
+      }).where(eq(farmStateTable.telegramId, telegramId));
+      // Update streak achievement
+      await setAchievementAbsolute(telegramId, "login_streak", loginStreak);
+    }
+
     const rawWorlds = (farm.worlds as WorldsData) || defaultWorlds();
     const activeWorldId = (farm.activeWorldId as WorldId) || "main";
     return {
@@ -732,6 +949,9 @@ async function getOrCreateFarm(telegramId: string) {
       seeds: (farm.seeds as CropInventory) || emptyInventory(),
       worlds: rawWorlds,
       activeWorldId,
+      loginStreak,
+      lastLoginDate: lastLogin !== today ? today : lastLogin,
+      streakRewardDay,
     };
   }
 
@@ -739,6 +959,7 @@ async function getOrCreateFarm(telegramId: string) {
   const initPlots = Array.from({ length: 9 }, (_, i) => ({ id: i, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null }));
   const initWorlds = defaultWorlds();
   initWorlds.main = { plots: initPlots, unlocked: true };
+  const today = getTodayDate();
   const newFarm = {
     telegramId,
     coins: 150,
@@ -757,10 +978,13 @@ async function getOrCreateFarm(telegramId: string) {
     buildings: [] as BuildingState[],
     products: emptyProducts(),
     quests: [...STORY_QUESTS, ...generateDailyQuests()] as QuestState[],
-    dailyQuestsDate: getTodayDate(),
+    dailyQuestsDate: today,
     npcOrders: generateNpcOrders(1),
     worlds: initWorlds,
     activeWorldId: "main" as WorldId,
+    loginStreak: 1,
+    lastLoginDate: today,
+    streakRewardDay: 1,
     updatedAt: now,
   };
 
@@ -802,7 +1026,11 @@ router.get("/:telegramId", async (req, res) => {
     if (firstNameHeader !== undefined) updatePayload.firstName = firstNameHeader || null;
     await db.update(farmStateTable).set(updatePayload).where(eq(farmStateTable.telegramId, telegramId));
 
-    res.json(serializeFarm(farm, telegramId));
+    // Update level achievement
+    await setAchievementAbsolute(telegramId, "level_up", farm.level);
+
+    const playerAchs = await getPlayerAchievements(telegramId);
+    res.json({ ...serializeFarm(farm, telegramId), achievements: buildAchievementsResponse(playerAchs) });
   } catch (err) {
     console.error("getFarmState error:", err);
     res.status(500).json({ error: "Internal server error" });
@@ -877,6 +1105,7 @@ router.post("/:telegramId/action", async (req, res) => {
       energy -= HARVEST_ENERGY;
       plots = plots.map((p) => p.id === plotId ? { ...p, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null, doubleHarvest: undefined } : p);
       quests = updateQuestProgress(quests, "harvest", plot.cropType, harvestQty);
+      await updateAchievementProgress(telegramId, "harvest", harvestQty);
 
     // ── HARVEST ALL ────────────────────────────────────────────────────────────
     } else if (action === "harvest_all") {
@@ -884,6 +1113,7 @@ router.post("/:telegramId/action", async (req, res) => {
       if (readyPlots.length === 0) return res.status(400).json({ error: "Нет готового урожая" });
       const sellMult = SEASON_SELL_MULTIPLIER[season] ?? 1;
       const harvestedIds: number[] = [];
+      let totalHarvested = 0;
       for (const plot of readyPlots) {
         if (energy < HARVEST_ENERGY) break;
         const cfg = getActiveCropConfig()[plot.cropType!];
@@ -894,7 +1124,9 @@ router.post("/:telegramId/action", async (req, res) => {
         energy -= HARVEST_ENERGY;
         quests = updateQuestProgress(quests, "harvest", plot.cropType!, harvestQty);
         harvestedIds.push(plot.id);
+        totalHarvested += harvestQty;
       }
+      if (totalHarvested > 0) await updateAchievementProgress(telegramId, "harvest", totalHarvested);
       plots = plots.map((p) =>
         harvestedIds.includes(p.id)
           ? { ...p, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null, doubleHarvest: undefined }
@@ -918,6 +1150,7 @@ router.post("/:telegramId/action", async (req, res) => {
         unlocked: true,
         unlockedAt: new Date().toISOString(),
       };
+      await updateAchievementProgress(telegramId, "unlock_world", 1);
 
     // ── SWITCH WORLD ────────────────────────────────────────────────────────────
     } else if (action === "switch_world") {
@@ -995,6 +1228,7 @@ router.post("/:telegramId/action", async (req, res) => {
       inventory[cropType as keyof CropInventory] -= quantity;
       quests = updateQuestProgress(quests, "sell_crops", cropType, quantity);
       quests = updateQuestProgress(quests, "sell_any", "coins", earned);
+      await updateAchievementProgress(telegramId, "earn_coins", earned);
 
     // ── BUY ANIMAL ─────────────────────────────────────────────────────────────
     } else if (action === "buy_animal") {
@@ -1010,6 +1244,7 @@ router.post("/:telegramId/action", async (req, res) => {
       const names: Record<string, string> = { chicken: "Курочка", cow: "Бурёнка", sheep: "Овечка" };
       animals.push({ id: newId, type: animalType, name: names[animalType] || animalType, fed: false, lastFedAt: null, productReadyAt: null, status: "hungry", level: 1 });
       quests = updateQuestProgress(quests, "buy_animal", animalType, 1);
+      await updateAchievementProgress(telegramId, "buy_animal", 1);
 
     // ── FEED ANIMAL ────────────────────────────────────────────────────────────
     } else if (action === "feed_animal") {
@@ -1049,6 +1284,7 @@ router.post("/:telegramId/action", async (req, res) => {
       const newId = buildings.length > 0 ? Math.max(...buildings.map((b) => b.id)) + 1 : 0;
       buildings.push({ id: newId, type: buildingType, level: 1, crafting: null });
       quests = updateQuestProgress(quests, "build_building", buildingType, 1);
+      await updateAchievementProgress(telegramId, "build_building", 1);
 
     // ── START CRAFT ────────────────────────────────────────────────────────────
     } else if (action === "start_craft") {
@@ -1094,6 +1330,7 @@ router.post("/:telegramId/action", async (req, res) => {
       xp += rcfg.xp;
       buildings[bIdx] = { ...building, crafting: null };
       quests = updateQuestProgress(quests, "collect_craft", rcfg.outputId, 1);
+      await updateAchievementProgress(telegramId, "collect_craft", 1);
 
     // ── SELL PRODUCT ───────────────────────────────────────────────────────────
     } else if (action === "sell_product") {
@@ -1259,6 +1496,7 @@ router.post("/:telegramId/action", async (req, res) => {
       xp += quest.rewardXp;
       if (quest.rewardGems) gems += quest.rewardGems;
       quests[qIdx] = { ...quest, claimed: true };
+      await updateAchievementProgress(telegramId, "claim_quest", 1);
 
     // ── REFRESH ORDERS ─────────────────────────────────────────────────────────
     } else if (action === "refresh_orders") {
@@ -1348,6 +1586,86 @@ router.post("/:telegramId/action", async (req, res) => {
       } else {
         return res.status(400).json({ error: "Неверный тип предмета" });
       }
+
+    // ── CLAIM STREAK REWARD ─────────────────────────────────────────────────────
+    } else if (action === "claim_streak_reward") {
+      const streakDay = farm.streakRewardDay || 0;
+      if (streakDay === 0) return res.status(400).json({ error: "Нет награды за стрик" });
+
+      const reward = STREAK_REWARDS.find((r) => r.day === streakDay);
+      if (!reward) return res.status(400).json({ error: "Неизвестная награда стрика" });
+
+      // Apply reward
+      const applied = applyStreakReward({ ...farm, coins, gems, seeds, animals }, reward);
+      coins = applied.coins;
+      gems = applied.gems;
+      Object.assign(seeds, applied.seeds);
+      animals = applied.animals;
+
+      // Reset streakRewardDay so it can't be claimed again today
+      await db.update(farmStateTable).set({
+        streakRewardDay: 0,
+        updatedAt: new Date(),
+      }).where(eq(farmStateTable.telegramId, telegramId));
+
+      // Save the full state now and return
+      const level = getLevelFromXp(xp);
+      if (level > farm.level) maxEnergy = Math.min(60, 30 + level * 2);
+      worlds[activeWorldId] = { ...(worlds[activeWorldId] || { unlocked: true }), plots };
+      await db.update(farmStateTable).set({
+        plots, coins, gems, xp, level, energy, maxEnergy,
+        animals, buildings, products, inventory, seeds,
+        quests, npcOrders, items, activeSprinklers,
+        worlds, activeWorldId,
+        streakRewardDay: 0,
+        updatedAt: new Date(),
+      }).where(eq(farmStateTable.telegramId, telegramId));
+      const farmOutStreak = serializeFarm({ ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, streakRewardDay: 0, loginStreak: farm.loginStreak, lastLoginDate: farm.lastLoginDate }, telegramId);
+      const playerAchsStreak = await getPlayerAchievements(telegramId);
+      return res.json({ ...farmOutStreak, achievements: buildAchievementsResponse(playerAchsStreak) });
+
+    // ── CLAIM ACHIEVEMENT ───────────────────────────────────────────────────────
+    } else if (action === "claim_achievement") {
+      const { achievementId } = req.body as { achievementId?: string };
+      if (!achievementId) return res.status(400).json({ error: "achievementId обязателен" });
+
+      const def = ACHIEVEMENT_DEFS.find((d) => d.id === achievementId);
+      if (!def) return res.status(400).json({ error: "Неизвестное достижение" });
+
+      const [existing] = await db
+        .select()
+        .from(achievementsTable)
+        .where(and(eq(achievementsTable.telegramId, telegramId), eq(achievementsTable.achievementId, achievementId)));
+
+      const progress = existing?.progress ?? 0;
+      if (progress < def.goal) return res.status(400).json({ error: "Достижение ещё не выполнено" });
+      if (existing?.claimed) return res.status(400).json({ error: "Награда уже получена" });
+
+      coins += def.rewardCoins;
+      gems += def.rewardGems;
+      if (def.rewardSeedType && def.rewardSeedQty) {
+        seeds[def.rewardSeedType as keyof CropInventory] = ((seeds[def.rewardSeedType as keyof CropInventory] as number) ?? 0) + def.rewardSeedQty;
+      }
+
+      if (existing) {
+        await db.update(achievementsTable).set({ claimed: 1, claimedAt: new Date(), updatedAt: new Date() }).where(eq(achievementsTable.id, existing.id));
+      } else {
+        await db.insert(achievementsTable).values({ telegramId, achievementId, progress: def.goal, claimed: 1, claimedAt: new Date() });
+      }
+
+      const level = getLevelFromXp(xp);
+      if (level > farm.level) maxEnergy = Math.min(60, 30 + level * 2);
+      worlds[activeWorldId] = { ...(worlds[activeWorldId] || { unlocked: true }), plots };
+      await db.update(farmStateTable).set({
+        plots, coins, gems, xp, level, energy, maxEnergy,
+        animals, buildings, products, inventory, seeds,
+        quests, npcOrders, items, activeSprinklers,
+        worlds, activeWorldId,
+        updatedAt: new Date(),
+      }).where(eq(farmStateTable.telegramId, telegramId));
+      const farmOutAch = serializeFarm({ ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId }, telegramId);
+      const playerAchsAch = await getPlayerAchievements(telegramId);
+      return res.json({ ...farmOutAch, achievements: buildAchievementsResponse(playerAchsAch) });
 
     // ── OPEN CASE ───────────────────────────────────────────────────────────────
     } else if (action === "open_case") {
@@ -1440,7 +1758,11 @@ router.post("/:telegramId/action", async (req, res) => {
       updatedAt: new Date(),
     }).where(eq(farmStateTable.telegramId, telegramId));
 
-    res.json(serializeFarm({ ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId }, telegramId));
+    // Update level achievement after any action
+    await setAchievementAbsolute(telegramId, "level_up", level);
+
+    const playerAchs = await getPlayerAchievements(telegramId);
+    res.json({ ...serializeFarm({ ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId }, telegramId), achievements: buildAchievementsResponse(playerAchs) });
   } catch (err) {
     console.error("performFarmAction error:", err);
     res.status(500).json({ error: "Internal server error" });
@@ -1448,6 +1770,41 @@ router.post("/:telegramId/action", async (req, res) => {
 });
 
 // ─────────────────────────────────── Serializer ───────────────────────────────
+
+export type AchievementState = {
+  id: string;
+  emoji: string;
+  title: string;
+  description: string;
+  goal: number;
+  progress: number;
+  completed: boolean;
+  claimed: boolean;
+  category: string;
+  rewardCoins: number;
+  rewardGems: number;
+};
+
+function buildAchievementsResponse(playerAchs: Achievement[]): AchievementState[] {
+  const map = new Map(playerAchs.map((a) => [a.achievementId, a]));
+  return ACHIEVEMENT_DEFS.map((def) => {
+    const pa = map.get(def.id);
+    const progress = pa?.progress ?? 0;
+    return {
+      id: def.id,
+      emoji: def.emoji,
+      title: def.title,
+      description: def.description,
+      goal: def.goal,
+      progress,
+      completed: progress >= def.goal,
+      claimed: pa?.claimed === 1,
+      category: def.category,
+      rewardCoins: def.rewardCoins,
+      rewardGems: def.rewardGems,
+    };
+  });
+}
 
 function serializeFarm(farm: any, telegramId: string) {
   const season = typeof farm.season === "string" ? farm.season as Season : "spring";
@@ -1487,6 +1844,10 @@ function serializeFarm(farm: any, telegramId: string) {
     username: farm.username ?? null,
     firstName: farm.firstName ?? null,
     refCode: farm.refCode ?? null,
+    loginStreak: farm.loginStreak ?? 0,
+    lastLoginDate: farm.lastLoginDate ?? "",
+    streakRewardDay: farm.streakRewardDay ?? 0,
+    streakRewards: STREAK_REWARDS,
     updatedAt: farm.updatedAt instanceof Date ? farm.updatedAt.toISOString() : farm.updatedAt,
   };
 }

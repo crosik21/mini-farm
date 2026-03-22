@@ -29,6 +29,9 @@ export const farmStateTable = pgTable("farm_states", {
   username: text("username"),
   firstName: text("first_name"),
   refCode: text("ref_code").unique(),
+  loginStreak: integer("login_streak").notNull().default(0),
+  lastLoginDate: text("last_login_date").notNull().default(""),
+  streakRewardDay: integer("streak_reward_day").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -242,3 +245,18 @@ export const promocodeUsesTable = pgTable("promocode_uses", {
 
 export type Promocode = typeof promocodesTable.$inferSelect;
 export type PromocodeUse = typeof promocodeUsesTable.$inferSelect;
+
+// ─────────────────────── Achievements ─────────────────────────────────────────
+
+export const achievementsTable = pgTable("achievements", {
+  id: serial("id").primaryKey(),
+  telegramId: text("telegram_id").notNull(),
+  achievementId: text("achievement_id").notNull(),
+  progress: integer("progress").notNull().default(0),
+  claimed: integer("claimed").notNull().default(0),
+  claimedAt: timestamp("claimed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export type Achievement = typeof achievementsTable.$inferSelect;

@@ -155,6 +155,31 @@ export interface CustomCaseMeta {
   drops: CustomCaseDrop[];
 }
 
+export interface StreakReward {
+  day: number;
+  label: string;
+  type: "coins" | "gems" | "seed" | "animal";
+  coins?: number;
+  gems?: number;
+  seedType?: string;
+  seedQty?: number;
+  animalType?: string;
+}
+
+export interface AchievementState {
+  id: string;
+  emoji: string;
+  title: string;
+  description: string;
+  goal: number;
+  progress: number;
+  completed: boolean;
+  claimed: boolean;
+  category: string;
+  rewardCoins: number;
+  rewardGems: number;
+}
+
 export interface FarmData {
   telegramId: string;
   username: string | null;
@@ -183,6 +208,11 @@ export interface FarmData {
   worldConfig: Record<WorldId, WorldConfig>;
   customCropMeta?: Record<string, CustomCropMeta>;
   customCaseMeta?: Record<string, CustomCaseMeta>;
+  loginStreak: number;
+  lastLoginDate: string;
+  streakRewardDay: number;
+  streakRewards: StreakReward[];
+  achievements: AchievementState[];
   updatedAt: string;
 }
 
@@ -211,4 +241,6 @@ export type FarmAction =
   | { action: "buy_item"; itemType: "watering_can" | "sprinkler"; quantity: number }
   | { action: "use_item"; itemType: "watering_can" | "sprinkler"; plotId: number }
   | { action: "open_case"; caseId: string }
-  | { action: "set_ref_code"; code: string };
+  | { action: "set_ref_code"; code: string }
+  | { action: "claim_streak_reward" }
+  | { action: "claim_achievement"; achievementId: string };

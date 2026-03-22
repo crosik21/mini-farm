@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { FarmData } from "@/lib/types";
+import { FarmData, AchievementState } from "@/lib/types";
 import { getLevelProgress, SEASON_CONFIG, ITEM_NAMES, ITEM_EMOJIS } from "@/lib/constants";
-import { Star, Wheat, Cat, Factory, Zap, Gem, Trophy, Sprout, Copy, ChevronDown, ChevronUp, Globe, Package, Tag } from "lucide-react";
+import { Star, Wheat, Cat, Factory, Zap, Gem, Trophy, Sprout, Copy, ChevronDown, ChevronUp, Globe, Package, Tag, Flame } from "lucide-react";
 import { EmojiImg } from "@/components/ui/emoji-img";
 import { useToast } from "@/hooks/use-toast";
 import { useFarmAction } from "@/hooks/use-farm";
@@ -70,6 +70,19 @@ function SectionHeader({ children, open, onToggle }: { children: React.ReactNode
   );
 }
 
+const CATEGORY_LABELS: Record<string, string> = {
+  harvest: "Урожай",
+  coins: "Монеты",
+  animals: "Животные",
+  buildings: "Здания",
+  level: "Уровень",
+  quests: "Задания",
+  trading: "Торговля",
+  worlds: "Миры",
+  streak: "Стрик",
+  crafting: "Крафт",
+};
+
 export function ProfileTab({ farm }: { farm: FarmData }) {
   const { toast } = useToast();
   const { progress, current, needed } = getLevelProgress(farm.xp, farm.level);
@@ -77,8 +90,11 @@ export function ProfileTab({ farm }: { farm: FarmData }) {
 
   const [showSeeds, setShowSeeds] = useState(false);
   const [showProducts, setShowProducts] = useState(false);
+  const [showAchievements, setShowAchievements] = useState(true);
+  const [achFilter, setAchFilter] = useState<"all" | "available" | "claimed">("all");
   const [promoCode, setPromoCode] = useState("");
   const { mutate: farmMutate, isPending: promoLoading } = useFarmAction();
+  const { mutate: claimAch, isPending: claimingAch } = useFarmAction();
 
   const completedQuests = farm.quests.filter((q) => q.claimed).length;
   const totalQuests = farm.quests.length;
@@ -114,21 +130,15 @@ export function ProfileTab({ farm }: { farm: FarmData }) {
     { icon: <Star size={17} />,    label: "Очки опыта",value: farm.xp.toLocaleString(),       color: "text-orange-400" },
   ];
 
-  const achievements = [
-    { emoji: "🌱", label: "Первый посев",    done: farm.level >= 1 },
-    { emoji: "🌾", label: "Первый урожай",   done: farm.xp >= 10 },
-    { emoji: "🪙", label: "Первые монеты",   done: farm.coins >= 10 || farm.xp >= 5 },
-    { emoji: "🐄", label: "Зоофермер",       done: farm.animals.length > 0 },
-    { emoji: "🏭", label: "Строитель",       done: farm.buildings.length > 0 },
-    { emoji: "⭐", label: "Уровень 3",       done: farm.level >= 3 },
-    { emoji: "💎", label: "Кристалл",        done: farm.gems > 0 },
-    { emoji: "🌻", label: "Уровень 5",       done: farm.level >= 5 },
-    { emoji: "🏆", label: "Уровень 7",       done: farm.level >= 7 },
-    { emoji: "🌍", label: "Путешественник",  done: farm.plots.length >= 8 },
-    { emoji: "🧑‍🍳", label: "Кулинар",         done: totalProducts >= 5 },
-    { emoji: "👑", label: "Уровень 10",      done: farm.level >= 10 },
-  ];
-  const doneCount = achievements.filter((a) => a.done).length;
+  const achievements = farm.achievements ?? [];
+  const doneCount = achievements.filter((a) => a.completed).length;
+  const claimableCount = achievements.filter((a) => a.completed && !a.claimed).length;
+
+  const filteredAchs = achievements.filter((a) => {
+    if (achFilter === "available") return !a.claimed;
+    if (achFilter === "claimed") return a.claimed;
+    return true;
+  });
 
   return (
     <div className="p-4 pb-10">
@@ -397,6 +407,51 @@ export function ProfileTab({ farm }: { farm: FarmData }) {
         <p className="text-[10px] text-muted-foreground mt-2">Введи промокод, чтобы получить монеты или гемы</p>
       </motion.div>
 
+      {/* ── Login Streak ── */}
+      {(farm.loginStreak ?? 0) > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.16 }}
+          className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950 dark:to-amber-950 border border-orange-200 dark:border-orange-800 rounded-2xl p-4 shadow-sm mb-3"
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <Flame className="w-4 h-4 text-orange-500" />
+            <p className="text-[10px] font-bold text-orange-700 dark:text-orange-400 uppercase tracking-widest">Ежедневный стрик</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <div className="flex items-baseline gap-1.5">
+                <span className="font-black text-2xl text-orange-600 dark:text-orange-400">{farm.loginStreak}</span>
+                <span className="text-sm font-bold text-orange-700 dark:text-orange-300">дн. подряд</span>
+              </div>
+              <div className="flex gap-1 mt-1.5">
+                {(farm.streakRewards ?? []).map((r) => {
+                  const cycleDay = ((farm.loginStreak - 1) % 7) + 1;
+                  const isPast = r.day < cycleDay;
+                  const isToday = r.day === cycleDay;
+                  return (
+                    <div
+                      key={r.day}
+                      className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border
+                        ${isToday ? "bg-amber-400 border-amber-600 text-white" :
+                          isPast ? "bg-green-400 border-green-600 text-white" :
+                          "bg-muted border-muted-foreground/20 text-muted-foreground"}`}
+                    >
+                      {isPast ? "✓" : r.day}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="text-xs text-orange-600 dark:text-orange-400 font-bold">Следующая</div>
+              <div className="text-xs text-muted-foreground">Зайди завтра!</div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       {/* ── Achievements ── */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -405,31 +460,101 @@ export function ProfileTab({ farm }: { farm: FarmData }) {
         className="bg-card border border-border rounded-2xl p-4 shadow-sm"
       >
         <div className="flex items-center justify-between mb-3">
-          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Достижения</p>
+          <div className="flex items-center gap-2">
+            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Достижения</p>
+            {claimableCount > 0 && (
+              <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full">
+                {claimableCount} новых
+              </span>
+            )}
+          </div>
           <span className="text-xs font-bold text-amber-600">{doneCount}/{achievements.length}</span>
         </div>
+
         {/* Progress bar */}
         <div className="h-1.5 bg-muted rounded-full overflow-hidden mb-3">
           <div
             className="h-full bg-gradient-to-r from-yellow-400 to-amber-500 rounded-full transition-all duration-700"
-            style={{ width: `${(doneCount / achievements.length) * 100}%` }}
+            style={{ width: `${achievements.length > 0 ? (doneCount / achievements.length) * 100 : 0}%` }}
           />
         </div>
-        <div className="grid grid-cols-4 gap-2">
-          {achievements.map((ach) => (
-            <div
-              key={ach.label}
-              title={ach.label}
-              className={`flex flex-col items-center gap-1 p-2 rounded-xl border transition-all ${
-                ach.done
-                  ? "bg-yellow-50 dark:bg-yellow-950 border-yellow-200 dark:border-yellow-800"
-                  : "bg-muted/30 border-muted opacity-35"
-              }`}
+
+        {/* Filter tabs */}
+        <div className="flex gap-1 mb-3">
+          {(["all", "available", "claimed"] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setAchFilter(f)}
+              className={`flex-1 py-1.5 rounded-xl text-[10px] font-bold transition-all
+                ${achFilter === f ? "bg-amber-500 text-white" : "bg-muted text-muted-foreground"}`}
             >
-              <EmojiImg emoji={ach.emoji} size={28} className={!ach.done ? "grayscale" : ""} />
-              <span className="text-[8px] text-center leading-tight font-semibold">{ach.label}</span>
-            </div>
+              {f === "all" ? "Все" : f === "available" ? "Доступные" : "Получено"}
+            </button>
           ))}
+        </div>
+
+        {/* Achievement list */}
+        <div className="flex flex-col gap-2">
+          {filteredAchs.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-4">Нет достижений в этой категории</p>
+          ) : (
+            filteredAchs.map((ach) => {
+              const progressPct = Math.min(100, (ach.progress / ach.goal) * 100);
+              const canClaim = ach.completed && !ach.claimed;
+              return (
+                <div
+                  key={ach.id}
+                  className={`flex items-center gap-3 p-3 rounded-2xl border transition-all
+                    ${ach.claimed ? "bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800 opacity-70" :
+                      canClaim ? "bg-amber-50 dark:bg-amber-950 border-amber-300 dark:border-amber-700" :
+                      "bg-muted/30 border-muted"}`}
+                >
+                  {/* Icon */}
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${ach.claimed ? "bg-green-100 dark:bg-green-900" : canClaim ? "bg-amber-100 dark:bg-amber-900" : "bg-muted"}`}>
+                    <EmojiImg emoji={ach.emoji} size={22} className={!ach.completed ? "grayscale opacity-40" : ""} />
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs font-bold text-foreground truncate">{ach.title}</p>
+                      {ach.claimed && <span className="text-green-500 text-[10px]">✓</span>}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground leading-tight mb-1">{ach.description}</p>
+                    {!ach.claimed && (
+                      <div className="flex items-center gap-1.5">
+                        <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${canClaim ? "bg-amber-500" : "bg-green-500/60"}`}
+                            style={{ width: `${progressPct}%` }}
+                          />
+                        </div>
+                        <span className="text-[9px] text-muted-foreground tabular-nums shrink-0">{ach.progress}/{ach.goal}</span>
+                      </div>
+                    )}
+                    {/* Reward preview */}
+                    <div className="flex items-center gap-1 mt-0.5">
+                      {ach.rewardCoins > 0 && <span className="text-[9px] text-amber-600 font-bold">🪙{ach.rewardCoins}</span>}
+                      {ach.rewardGems > 0 && <span className="text-[9px] text-purple-600 font-bold">💎{ach.rewardGems}</span>}
+                    </div>
+                  </div>
+
+                  {/* Claim button */}
+                  {canClaim && (
+                    <button
+                      onClick={() => claimAch({ action: "claim_achievement", achievementId: ach.id }, {
+                        onSuccess: () => {},
+                      })}
+                      disabled={claimingAch}
+                      className="px-3 py-2 bg-amber-500 text-white text-[10px] font-black rounded-xl border-b-2 border-amber-700 active:translate-y-0.5 active:border-b disabled:opacity-50 shrink-0"
+                    >
+                      Забрать
+                    </button>
+                  )}
+                </div>
+              );
+            })
+          )}
         </div>
       </motion.div>
     </div>

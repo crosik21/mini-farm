@@ -96,6 +96,12 @@ export function useFarmAction() {
       } else if (variables.action === "expand_plots") {
         hapticFeedback("success");
         toast({ title: "Поле расширено! 🌾", description: "Добавлены новые грядки." });
+      } else if (variables.action === "claim_streak_reward") {
+        hapticFeedback("success");
+        toast({ title: "Награда за стрик получена! 🔥" });
+      } else if (variables.action === "claim_achievement") {
+        hapticFeedback("success");
+        toast({ title: "Достижение засчитано! 🏆" });
       }
     },
     onError: (error) => {

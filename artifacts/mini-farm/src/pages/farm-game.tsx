@@ -18,6 +18,7 @@ import { EnergyModal } from "@/components/game/EnergyModal";
 import { AdminTab } from "@/components/game/AdminTab";
 import { FriendsTab } from "@/components/game/FriendsTab";
 import { CasesTab } from "@/components/game/CasesTab";
+import { StreakModal } from "@/components/game/StreakModal";
 import { Sprout, Cat, Factory } from "lucide-react";
 
 interface FloatingReward {
@@ -1076,9 +1077,19 @@ export default function FarmGame() {
   const [activePlotId, setActivePlotId] = useState<number | null>(null);
   const [energyModalOpen, setEnergyModalOpen] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
+  const [streakModalOpen, setStreakModalOpen] = useState(false);
   const [floatingRewards, setFloatingRewards] = useState<FloatingReward[]>([]);
   const [activeItemMode, setActiveItemMode] = useState<"watering_can" | "sprinkler" | null>(null);
   const rewardIdRef = useRef(0);
+  const streakShownRef = useRef(false);
+
+  // Show streak modal once on first load if there's a pending reward
+  useEffect(() => {
+    if (farm && !streakShownRef.current && farm.streakRewardDay > 0) {
+      streakShownRef.current = true;
+      setStreakModalOpen(true);
+    }
+  }, [farm]);
 
   // Telegram init is handled in App.tsx on mount — nothing to do here
 
@@ -1159,6 +1170,8 @@ export default function FarmGame() {
   }
 
   const claimableQuests = farm.quests.filter((q) => q.completed && !q.claimed).length;
+  const claimableAchievements = (farm.achievements ?? []).filter((a) => a.completed && !a.claimed).length;
+  const profileBadge = claimableAchievements + (farm.streakRewardDay > 0 ? 1 : 0);
   const telegramId = farm.telegramId;
 
   return (
@@ -1234,7 +1247,7 @@ export default function FarmGame() {
         </AnimatePresence>
       </main>
 
-      <BottomNav activeTab={activeTab} onTabChange={setActiveTab} shopBadge={claimableQuests} telegramId={telegramId} />
+      <BottomNav activeTab={activeTab} onTabChange={setActiveTab} shopBadge={claimableQuests} profileBadge={profileBadge} telegramId={telegramId} />
 
       <PlantModal
         isOpen={activePlotId !== null}
@@ -1255,6 +1268,13 @@ export default function FarmGame() {
           onClose={() => setMapOpen(false)}
           onUnlock={(worldId) => performAction({ action: "unlock_world", worldId })}
           onSwitch={(worldId) => performAction({ action: "switch_world", worldId })}
+        />
+      )}
+
+      {streakModalOpen && (
+        <StreakModal
+          farm={farm}
+          onClose={() => setStreakModalOpen(false)}
         />
       )}
     </div>

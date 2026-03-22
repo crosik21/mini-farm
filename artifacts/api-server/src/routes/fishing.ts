@@ -113,7 +113,6 @@ router.post("/collect", async (req, res) => {
     }
 
     const fishType = session.fishType!;
-    const fishMeta = FISH_META[fishType];
 
     const [farm] = await tx
       .select()
@@ -128,7 +127,8 @@ router.post("/collect", async (req, res) => {
     await tx.update(fishingTable).set({ claimed: 1 }).where(eq(fishingTable.id, session.id));
     await tx.update(farmStateTable).set({ fishInventory: fishInv, updatedAt: new Date() }).where(eq(farmStateTable.telegramId, me));
 
-    return { ok: true, fishType, fishMeta, fishInventory: fishInv };
+    // Return full fishMeta map (not just one entry) — frontend expects data.fishMeta[data.fishType]
+    return { ok: true, fishType, fishMeta: FISH_META, fishInventory: fishInv };
   });
 
   if ("error" in result) return res.status((result as any).status ?? 400).json({ error: (result as any).error });

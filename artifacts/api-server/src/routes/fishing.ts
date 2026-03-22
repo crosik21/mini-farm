@@ -64,38 +64,54 @@ router.post("/start", async (req, res) => {
   const me = getTelegramId(req);
   if (!me) return res.status(401).json({ error: "No telegram id" });
 
-  const [farm] = await db.select().from(farmStateTable).where(eq(farmStateTable.telegramId, me));
-  if (!farm) return res.status(404).json({ error: "Ферма не найдена" });
+  type StartResult =
+    | ErrResult
+    | { ok: true; session: typeof fishingTable.$inferSelect; waitSec: number; fishMeta: typeof FISH_META };
 
-  const [existing] = await db
-    .select()
-    .from(fishingTable)
-    .where(and(eq(fishingTable.telegramId, me), eq(fishingTable.claimed, 0)))
-    .limit(1);
-  if (existing) return res.status(400).json({ error: "Удочка уже заброшена!" });
+  const result: StartResult = await db.transaction(async (tx): Promise<StartResult> => {
+    const [farm] = await tx
+      .select()
+      .from(farmStateTable)
+      .where(eq(farmStateTable.telegramId, me))
+      .for("update");
+    if (!farm) return errResult("Ферма не найдена", 404);
 
-  if (farm.energy < FISHING_ENERGY_COST) {
-    return res.status(400).json({ error: `Недостаточно энергии (нужно ${FISHING_ENERGY_COST})` });
-  }
+    // Check for unclaimed session inside TX to prevent concurrent double-start
+    const [existing] = await tx
+      .select()
+      .from(fishingTable)
+      .where(and(eq(fishingTable.telegramId, me), eq(fishingTable.claimed, 0)))
+      .limit(1)
+      .for("update");
+    if (existing) return errResult("Удочка уже заброшена!");
 
-  const fish = pickFish();
-  const waitSec = Math.floor(Math.random() * (fish.maxWaitSec - fish.minWaitSec + 1)) + fish.minWaitSec;
-  const now = new Date();
-  const catchAt = new Date(now.getTime() + waitSec * 1000);
+    if (farm.energy < FISHING_ENERGY_COST) {
+      return errResult(`Недостаточно энергии (нужно ${FISHING_ENERGY_COST})`);
+    }
 
-  await db.update(farmStateTable)
-    .set({ energy: farm.energy - FISHING_ENERGY_COST })
-    .where(eq(farmStateTable.telegramId, me));
+    const fish = pickFish();
+    const waitSec = Math.floor(Math.random() * (fish.maxWaitSec - fish.minWaitSec + 1)) + fish.minWaitSec;
+    const now = new Date();
+    const catchAt = new Date(now.getTime() + waitSec * 1000);
 
-  const [session] = await db.insert(fishingTable).values({
-    telegramId: me,
-    baitUsedAt: now,
-    catchAt,
-    fishType: fish.id,
-    claimed: 0,
-  }).returning();
+    await tx
+      .update(farmStateTable)
+      .set({ energy: farm.energy - FISHING_ENERGY_COST })
+      .where(eq(farmStateTable.telegramId, me));
 
-  res.json({ ok: true, session, waitSec, fishMeta: FISH_META });
+    const [session] = await tx.insert(fishingTable).values({
+      telegramId: me,
+      baitUsedAt: now,
+      catchAt,
+      fishType: fish.id,
+      claimed: 0,
+    }).returning();
+
+    return { ok: true, session, waitSec, fishMeta: FISH_META };
+  });
+
+  if (!result.ok) return res.status(result.status).json({ error: result.error });
+  res.json({ ok: true, session: result.session, waitSec: result.waitSec, fishMeta: result.fishMeta });
 });
 
 // POST /api/fishing/collect — collect ready fish

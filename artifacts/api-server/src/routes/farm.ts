@@ -160,6 +160,8 @@ const PRODUCT_SELL_PRICE: Record<string, number> = {
   corn_starch: 180, berry_juice: 160, corn_bread: 380,
   pumpkin_pie: 1100, berry_jam: 200, mushroom_soup: 420, ice_cream: 620,
   honey_yogurt: 360, bacon: 220, honey_bread: 400, roast: 600,
+  // Fish recipes
+  fish_soup: 280, grilled_fish: 420,
 };
 
 const SEASON_GROWTH_MULTIPLIER: Record<Season, number> = {

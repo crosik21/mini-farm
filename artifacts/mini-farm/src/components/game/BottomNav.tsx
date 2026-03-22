@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { Home, ShoppingBag, User, Shield, Users, Package, Fish, Store } from "lucide-react";
+import { Home, ShoppingBag, User, Shield, Users, Package, Fish, Store, Gift } from "lucide-react";
 
 export type Tab = "farm" | "shop" | "fishing" | "marketplace" | "friends" | "cases" | "profile" | "admin";
 
@@ -51,6 +51,11 @@ export function BottomNav({ activeTab, onTabChange, shopBadge, profileBadge, tel
       id: "marketplace",
       label: "Рынок",
       icon: (active) => <Store size={20} strokeWidth={active ? 2.5 : 1.7} />,
+    },
+    {
+      id: "cases",
+      label: "Кейсы",
+      icon: (active) => <Gift size={20} strokeWidth={active ? 2.5 : 1.7} />,
     },
     {
       id: "friends",

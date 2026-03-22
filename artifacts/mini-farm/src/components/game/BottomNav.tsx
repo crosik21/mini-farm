@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { Home, ShoppingBag, User, Shield, Users, Fish, Gift, Trophy, Store, MoreHorizontal, X } from "lucide-react";
+import { Home, ShoppingBag, User, Shield, Users, Fish, Gift, Trophy, Store, MoreHorizontal, X, Package } from "lucide-react";
 
 export type Tab = "farm" | "shop" | "fishing" | "marketplace" | "friends" | "cases" | "pass" | "profile" | "admin";
 
@@ -29,7 +29,7 @@ const TAB_COLORS = {
 };
 
 // Tabs in the "More" tray
-const MORE_TABS: Tab[] = ["marketplace", "cases", "friends", "profile"];
+const MORE_TABS: Tab[] = ["marketplace", "cases", "friends", "pass"];
 
 export function BottomNav({ activeTab, onTabChange, shopBadge, profileBadge, telegramId }: BottomNavProps) {
   const isAdmin = telegramId === ADMIN_TELEGRAM_ID;
@@ -60,9 +60,10 @@ export function BottomNav({ activeTab, onTabChange, shopBadge, profileBadge, tel
       icon: (active) => <Fish size={20} strokeWidth={active ? 2.5 : 1.7} />,
     },
     {
-      id: "pass",
-      label: "Пасс",
-      icon: (active) => <Trophy size={20} strokeWidth={active ? 2.5 : 1.7} />,
+      id: "profile",
+      label: "Профиль",
+      icon: (active) => <User size={20} strokeWidth={active ? 2.5 : 1.7} />,
+      badge: profileBadge,
     },
   ];
 
@@ -83,10 +84,9 @@ export function BottomNav({ activeTab, onTabChange, shopBadge, profileBadge, tel
       icon: <Users size={22} strokeWidth={1.7} />,
     },
     {
-      id: "profile",
-      label: "Профиль",
-      icon: <User size={22} strokeWidth={1.7} />,
-      badge: profileBadge,
+      id: "pass",
+      label: "Пасс",
+      icon: <Trophy size={22} strokeWidth={1.7} />,
     },
     ...(isAdmin
       ? [{
@@ -275,16 +275,6 @@ export function BottomNav({ activeTab, onTabChange, shopBadge, profileBadge, tel
             >
               Ещё
             </motion.span>
-            {/* Badge for hidden tabs */}
-            {!isMoreActive && (profileBadge ?? 0) > 0 && (
-              <motion.span
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                className="absolute top-0 right-[calc(50%-22px)] min-w-[16px] h-4 px-1 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center z-20 shadow-sm"
-              >
-                {profileBadge! > 9 ? "9+" : profileBadge}
-              </motion.span>
-            )}
           </button>
         </div>
       </div>

@@ -28,7 +28,7 @@ export function TopBar({ farm, onEnergyClick }: TopBarProps) {
     <div
       className="top-bar sticky top-0 z-30 bg-card/95 backdrop-blur border-b border-border shadow-sm px-3 pb-1.5"
     >
-      {/* ── Row 1: Level + XP bar + Season ── */}
+      {/* ── Row 1: Level + XP bar + Season + Weather ── */}
       <div className="flex items-center gap-1.5 mb-1">
         <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-400 to-amber-500 flex items-center justify-center font-bold text-white text-[11px] shadow border-[1.5px] border-amber-600 flex-shrink-0">
           {farm.level}
@@ -47,12 +47,42 @@ export function TopBar({ farm, onEnergyClick }: TopBarProps) {
             />
           </div>
         </div>
-        <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${season.bgColor} ${season.color}`}>
-          {season.emoji} {season.name}
+
+        {/* Season + Weather together */}
+        <div className="relative flex-shrink-0">
+          <button
+            onClick={() => setShowWeatherTip((v) => !v)}
+            className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold border transition-all active:scale-95 ${season.bgColor} ${season.color}`}
+            style={{ borderColor: "currentColor", borderOpacity: 0.25 }}
+          >
+            <span>{season.emoji}</span>
+            <span className="opacity-40 text-[8px]">|</span>
+            <span>{weatherCfg.emoji}</span>
+          </button>
+          <AnimatePresence>
+            {showWeatherTip && (
+              <motion.div
+                initial={{ opacity: 0, y: -4, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -4, scale: 0.96 }}
+                className="absolute top-full right-0 mt-1.5 z-50 bg-white border border-gray-200 rounded-xl shadow-lg px-3 py-2 w-48 text-xs"
+                onClick={() => setShowWeatherTip(false)}
+              >
+                <div className="flex items-center gap-1 font-bold mb-1 text-[11px]">
+                  <span>{season.emoji}</span>
+                  <span className={season.color}>{season.name}</span>
+                  <span className="text-gray-300 mx-0.5">·</span>
+                  <span>{weatherCfg.emoji}</span>
+                  <span>{weatherCfg.label}</span>
+                </div>
+                <div className="text-gray-500 leading-snug">{weatherCfg.tip}</div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
-      {/* ── Row 2: Coins + Gems + Weather + Energy ── */}
+      {/* ── Row 2: Coins + Gems + Energy ── */}
       <div className="flex items-center gap-1.5">
         <motion.div key={farm.coins} initial={{ scale: 1.12 }} animate={{ scale: 1 }}
           className="flex items-center gap-0.5 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
@@ -65,30 +95,6 @@ export function TopBar({ farm, onEnergyClick }: TopBarProps) {
           <Gem className="w-2.5 h-2.5 text-purple-500" />
           <span className="font-bold text-purple-700 text-xs">{farm.gems}</span>
         </motion.div>
-
-        {/* Weather chip */}
-        <div className="relative">
-          <button
-            onClick={() => setShowWeatherTip((v) => !v)}
-            className={`flex items-center gap-0.5 border rounded-full px-1.5 py-0.5 text-[11px] font-bold transition-all active:scale-95 ${WEATHER_CHIP_STYLE[weather] ?? WEATHER_CHIP_STYLE.sunny}`}
-          >
-            <span>{weatherCfg.emoji}</span>
-          </button>
-          <AnimatePresence>
-            {showWeatherTip && (
-              <motion.div
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                className="absolute top-full left-0 mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg px-3 py-2 w-44 text-xs"
-                onClick={() => setShowWeatherTip(false)}
-              >
-                <div className="font-bold mb-0.5">{weatherCfg.emoji} {weatherCfg.label}</div>
-                <div className="text-gray-500">{weatherCfg.tip}</div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
 
         <button
           onClick={onEnergyClick}

@@ -2064,7 +2064,7 @@ router.post("/:telegramId/action", async (req, res) => {
       animals = applied.animals;
 
       const level = getLevelFromXp(xp);
-      if (level > farm.level) maxEnergy = Math.min(60, 30 + level * 2);
+      if (level > farm.level) maxEnergy = Math.max(maxEnergy, Math.min(60, 30 + level * 2));
       worlds[activeWorldId] = { ...(worlds[activeWorldId] || { unlocked: true }), plots };
 
       // Single atomic transaction: claim flag + full reward state in one commit
@@ -2109,7 +2109,7 @@ router.post("/:telegramId/action", async (req, res) => {
         newSeedsAch[def.rewardSeedType as keyof CropInventory] = ((newSeedsAch[def.rewardSeedType as keyof CropInventory] as number) ?? 0) + def.rewardSeedQty;
       }
       const levelAch = getLevelFromXp(xp);
-      if (levelAch > farm.level) maxEnergy = Math.min(60, 30 + levelAch * 2);
+      if (levelAch > farm.level) maxEnergy = Math.max(maxEnergy, Math.min(60, 30 + levelAch * 2));
       worlds[activeWorldId] = { ...(worlds[activeWorldId] || { unlocked: true }), plots };
 
       // Single transaction: mark achievement claimed AND credit farm rewards atomically
@@ -2260,7 +2260,7 @@ router.post("/:telegramId/action", async (req, res) => {
 
       worlds[activeWorldId] = { ...(worlds[activeWorldId] || { unlocked: true }), plots };
       const claimLevel = getLevelFromXp(xp);
-      if (claimLevel > farm.level) maxEnergy = Math.min(60, 30 + claimLevel * 2);
+      if (claimLevel > farm.level) maxEnergy = Math.max(maxEnergy, Math.min(60, 30 + claimLevel * 2));
 
       const passClaimResult = await db.transaction(async (tx) => {
         // Lock farm pass row for update
@@ -2394,7 +2394,7 @@ router.post("/:telegramId/action", async (req, res) => {
       // Store result in response extras (attach to the farm response)
       const caseResult = { cropId, qty, rarity };
       const level = getLevelFromXp(xp);
-      if (level > farm.level) maxEnergy = Math.min(60, 30 + level * 2);
+      if (level > farm.level) maxEnergy = Math.max(maxEnergy, Math.min(60, 30 + level * 2));
       worlds[activeWorldId] = { ...(worlds[activeWorldId] || { unlocked: true }), plots };
       await db.update(farmStateTable).set({
         plots, coins, gems, xp, level, energy, maxEnergy,
@@ -2538,7 +2538,7 @@ router.post("/:telegramId/action", async (req, res) => {
 
     const level = getLevelFromXp(xp);
     if (level > farm.level) {
-      maxEnergy = Math.min(60, 30 + level * 2);
+      maxEnergy = Math.max(maxEnergy, Math.min(60, 30 + level * 2));
       skillPoints += (level - farm.level); // +1 skill point per level gained
     }
 

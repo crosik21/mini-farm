@@ -572,15 +572,19 @@ function FieldView({
   const [dragItem, setDragItem] = useState<DragItemState | null>(null);
   const [swipeDir, setSwipeDir] = useState<"left" | "right" | null>(null);
   const dragItemRef = useRef<DragItemState | null>(null);
+  const farmRef = useRef<FarmData>(farm);
   const rafRef = useRef<number | null>(null);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   // After drag ends, block ghost clicks for 400 ms
   const blockClickRef = useRef(false);
   // Tracks which plots were already planted in the current drag session
   const plantedInDragRef = useRef<Set<number>>(new Set());
+  // Seed count at the start of a drag session — used to cap plant attempts
+  const dragSeedCountRef = useRef<number>(0);
 
-  // Keep ref in sync with state
+  // Keep refs in sync with latest props/state
   useEffect(() => { dragItemRef.current = dragItem; }, [dragItem]);
+  useEffect(() => { farmRef.current = farm; }, [farm]);
 
   // ── World swipe detection ────────────────────────────────────────────────────
   const unlockedWorlds = WORLD_ORDER.filter(
@@ -630,6 +634,14 @@ function FieldView({
     // ── Multi-plant: plant on every empty plot the pointer passes over ──
     const cur = dragItemRef.current;
     if (cur?.type === "seed" && cur.cropId) {
+      // Stop drag silently if seeds are exhausted (avoid server error spam)
+      if (plantedInDragRef.current.size >= dragSeedCountRef.current) {
+        plantedInDragRef.current = new Set();
+        setDragItem(null);
+        setInventoryOpen(false);
+        return;
+      }
+
       const overlay = e.currentTarget as HTMLElement;
       overlay.style.pointerEvents = "none";
       const el = document.elementFromPoint(cx, cy) as HTMLElement | null;
@@ -665,8 +677,9 @@ function FieldView({
     if (plotIdStr) {
       const plotId = parseInt(plotIdStr);
       if (cur.type === "seed" && cur.cropId && plotStatus === "empty") {
-        // Only plant if this plot wasn't already planted during the move phase
-        if (!plantedInDragRef.current.has(plotId)) {
+        // Only plant if this plot wasn't already planted and seeds remain
+        const seedsLeft = dragSeedCountRef.current - plantedInDragRef.current.size;
+        if (!plantedInDragRef.current.has(plotId) && seedsLeft > 0) {
           onPlantDirect(plotId, cur.cropId);
         }
       } else if (cur.type === "booster" && cur.boosterType) {
@@ -1003,7 +1016,11 @@ function FieldView({
           farm={farm}
           onClose={() => setInventoryOpen(false)}
           onActivateItem={(item) => { onActivateItem(item); setInventoryOpen(false); }}
-          onStartDrag={(item) => { plantedInDragRef.current = new Set(); setDragItem(item); }}
+          onStartDrag={(item) => {
+            plantedInDragRef.current = new Set();
+            dragSeedCountRef.current = item.cropId ? ((farmRef.current.seeds ?? {})[item.cropId] ?? 0) : 0;
+            setDragItem(item);
+          }}
         />
       )}
 

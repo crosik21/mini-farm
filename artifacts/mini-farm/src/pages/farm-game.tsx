@@ -693,7 +693,7 @@ function FieldView({
 
   return (
     <div
-      className="flex flex-col min-h-full"
+      className="flex flex-col"
       style={{ background: `linear-gradient(180deg, ${bg1} 0%, ${bg2} 100%)` }}
       onPointerDown={handleSwipeStart}
       onPointerUp={handleSwipeEnd}
@@ -827,7 +827,7 @@ function FieldView({
       )}
 
       {/* ── Field grid — full width, no box ── */}
-      <div className="flex-1 flex flex-col justify-center items-center px-2 pb-1">
+      <div className="flex flex-col justify-center items-center px-2 pb-1">
 
         {/* Desktop world nav + field row */}
         <div className="flex items-center w-full justify-center gap-2">
@@ -1267,7 +1267,7 @@ export default function FarmGame() {
               <FarmSectionNav active={farmSection} onChange={setFarmSection} farm={farm} />
               <AnimatePresence mode="wait">
                 {farmSection === "field" && (
-                  <motion.div key="field" className="flex flex-col flex-1" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }} transition={{ duration: 0.18 }}>
+                  <motion.div key="field" className="flex flex-col" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }} transition={{ duration: 0.18 }}>
                     <FieldView farm={farm} onPlotTap={handlePlotTap} onExpandPlots={handleExpandPlots} isExpanding={isPending}
                       floatingRewards={floatingRewards} onRewardDone={handleRewardDone}
                       activeItemMode={activeItemMode} onCancelItemMode={() => setActiveItemMode(null)}

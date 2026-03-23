@@ -117,9 +117,15 @@ export function useFarmAction() {
       hapticFeedback("medium");
     },
     onSuccess: (data, variables) => {
+      // Не обновлять кеш если ответ не содержит полных данных фермы
+      // (например, record_playtime возвращает только { ok, totalPlaySeconds, medals })
+      if (!data.telegramId) {
+        console.log("[Farm] Partial response for", variables.action, "— skipping cache update");
+        return;
+      }
       // Защита: не перезаписывать кеш если ответ содержит чужой telegramId
-      if (data.telegramId && data.telegramId !== telegramId) {
-        console.warn("Farm response telegramId mismatch, ignoring cache update");
+      if (data.telegramId !== telegramId) {
+        console.warn("[Farm] telegramId mismatch:", data.telegramId, "!==", telegramId, "— ignoring");
         return;
       }
       queryClient.setQueryData(["farm", telegramId], data);

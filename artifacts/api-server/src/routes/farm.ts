@@ -184,7 +184,7 @@ const SEASON_NAMES: Record<Season, string> = {
 const SEASONS_ORDER: Season[] = ["spring", "summer", "autumn", "winter"];
 const SEASON_DURATION_MS = 2 * 60 * 60 * 1000; // 2 hours per season
 
-const ENERGY_REGEN_INTERVAL_MS = 5 * 60 * 1000; // 1 energy per 5 min
+const ENERGY_REGEN_INTERVAL_MS = 2 * 60 * 1000; // 3 energy per 2 min
 
 // ─────────────────────────────── Weather System ───────────────────────────────
 type WeatherType = "sunny" | "rainy" | "storm";
@@ -974,7 +974,7 @@ function regenEnergy(energy: number, maxEnergy: number, lastRegen: Date): { ener
   const elapsed = Date.now() - lastRegen.getTime();
   const intervals = Math.floor(elapsed / ENERGY_REGEN_INTERVAL_MS);
   if (intervals <= 0) return { energy, lastRegen };
-  const newEnergy = Math.min(maxEnergy, energy + intervals);
+  const newEnergy = Math.min(maxEnergy, energy + intervals * 3);
   const newLastRegen = new Date(lastRegen.getTime() + intervals * ENERGY_REGEN_INTERVAL_MS);
   return { energy: newEnergy, lastRegen: newLastRegen };
 }

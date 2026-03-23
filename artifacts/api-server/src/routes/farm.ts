@@ -2371,6 +2371,98 @@ router.post("/:telegramId/action", async (req, res) => {
       const playerAchsClaim = await getPlayerAchievements(telegramId);
       return res.json({ ...farmOutClaim, farmPass: serializeFarmPass(updatedPass), achievements: buildAchievementsResponse(playerAchsClaim) });
 
+    // ── CLAIM ALL PASS REWARDS ─────────────────────────────────────────────────
+    } else if (action === "claim_all_pass_rewards") {
+      const { seasonId: claimAllSeasonId } = getCurrentPassSeason();
+
+      const claimAllResult = await db.transaction(async (tx) => {
+        const [pass] = await tx
+          .select()
+          .from(farmPassTable)
+          .where(and(eq(farmPassTable.telegramId, telegramId), eq(farmPassTable.passSeasonId, claimAllSeasonId)))
+          .for("update");
+
+        if (!pass) return { status: "no_pass" as const };
+
+        const currentFreeTrack = (pass.freeTrackClaimed as number[]) || [];
+        const currentPremiumTrack = (pass.premiumTrackClaimed as number[]) || [];
+
+        let newCoins = coins;
+        let newGems = gems;
+        const newSeeds = { ...seeds };
+        const currentPets = (farm.pets as PetsInventory | null) ?? { owned: [] };
+        const newPets: PetsInventory = { owned: [...currentPets.owned] };
+        const newFreeTrack = [...currentFreeTrack];
+        const newPremiumTrack = [...currentPremiumTrack];
+        let claimedCount = 0;
+
+        for (const reward of PASS_REWARDS) {
+          if (reward.level > pass.level) break;
+
+          // Free track
+          if (!newFreeTrack.includes(reward.level)) {
+            const rd = reward.free;
+            if (rd.type === "coins" && rd.amount) newCoins += rd.amount;
+            if (rd.type === "gems" && rd.amount) newGems += rd.amount;
+            if (rd.type === "seeds" && rd.seedType && rd.seedQty) {
+              newSeeds[rd.seedType as keyof CropInventory] = ((newSeeds[rd.seedType as keyof CropInventory] as number) ?? 0) + rd.seedQty;
+            }
+            if (rd.type === "pet" && rd.petType && !newPets.owned.some((p) => p.type === rd.petType)) {
+              newPets.owned.push({ type: rd.petType!, obtainedAt: new Date().toISOString(), source: "farm_pass" });
+            }
+            newFreeTrack.push(reward.level);
+            claimedCount++;
+          }
+
+          // Premium track
+          if (pass.isPremium && !newPremiumTrack.includes(reward.level)) {
+            const rd = reward.premium;
+            if (rd.type === "coins" && rd.amount) newCoins += rd.amount;
+            if (rd.type === "gems" && rd.amount) newGems += rd.amount;
+            if (rd.type === "seeds" && rd.seedType && rd.seedQty) {
+              newSeeds[rd.seedType as keyof CropInventory] = ((newSeeds[rd.seedType as keyof CropInventory] as number) ?? 0) + rd.seedQty;
+            }
+            if (rd.type === "pet" && rd.petType && !newPets.owned.some((p) => p.type === rd.petType)) {
+              newPets.owned.push({ type: rd.petType!, obtainedAt: new Date().toISOString(), source: "farm_pass" });
+            }
+            newPremiumTrack.push(reward.level);
+            claimedCount++;
+          }
+        }
+
+        if (claimedCount === 0) return { status: "nothing_to_claim" as const };
+
+        const claimAllLevel = getLevelFromXp(xp);
+        if (claimAllLevel > farm.level) maxEnergy = Math.max(maxEnergy, Math.min(60, 30 + claimAllLevel * 2));
+        worlds[activeWorldId] = { ...(worlds[activeWorldId] || { unlocked: true }), plots };
+
+        const [updatedPass] = await tx
+          .update(farmPassTable)
+          .set({ freeTrackClaimed: newFreeTrack, premiumTrackClaimed: newPremiumTrack, updatedAt: new Date() })
+          .where(eq(farmPassTable.id, pass.id))
+          .returning();
+
+        await tx.update(farmStateTable).set({
+          plots, coins: newCoins, gems: newGems, xp, level: claimAllLevel, energy, maxEnergy,
+          animals, buildings, products, inventory, seeds: newSeeds,
+          quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, eventCoins, toolTiers, pets: newPets,
+          updatedAt: new Date(),
+        }).where(eq(farmStateTable.telegramId, telegramId));
+
+        return { status: "ok" as const, updatedPass, newCoins, newGems, newSeeds, newPets, claimedCount, claimAllLevel };
+      });
+
+      if (claimAllResult.status === "no_pass") return res.status(400).json({ error: "Пасс не найден" });
+      if (claimAllResult.status === "nothing_to_claim") return res.status(400).json({ error: "Нет доступных наград" });
+
+      coins = claimAllResult.newCoins;
+      gems = claimAllResult.newGems;
+      Object.assign(seeds, claimAllResult.newSeeds);
+      const updatedPassAll = claimAllResult.updatedPass;
+      const farmOutAll = serializeFarm({ ...farm, plots, coins, gems, xp, level: claimAllResult.claimAllLevel, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, eventCoins, toolTiers, pets: claimAllResult.newPets }, telegramId);
+      const playerAchsAll = await getPlayerAchievements(telegramId);
+      return res.json({ ...farmOutAll, farmPass: serializeFarmPass(updatedPassAll), achievements: buildAchievementsResponse(playerAchsAll) });
+
     // ── OPEN CASE ───────────────────────────────────────────────────────────────
     } else if (action === "open_case") {
       const { caseId } = req.body;

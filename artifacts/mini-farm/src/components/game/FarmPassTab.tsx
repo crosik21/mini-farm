@@ -141,8 +141,20 @@ export function FarmPassTab({ farm }: FarmPassTabProps) {
   const msLeft = seasonEndAt ? Math.max(0, seasonEndAt.getTime() - Date.now()) : 0;
   const daysLeft = Math.floor(msLeft / (1000 * 60 * 60 * 24));
 
+  const claimableCount = rewards.reduce((acc, r) => {
+    const reachedLevel = r.level <= passLevel;
+    if (!reachedLevel) return acc;
+    if (!freeTrackClaimed.includes(r.level)) acc++;
+    if (isPremium && !premiumTrackClaimed.includes(r.level)) acc++;
+    return acc;
+  }, 0);
+
   const handleClaim = (level: number, track: "free" | "premium") => {
     performAction({ action: "claim_pass_reward", passLevel: level, track });
+  };
+
+  const handleClaimAll = () => {
+    performAction({ action: "claim_all_pass_rewards" });
   };
 
   const handleBuyPass = () => {
@@ -182,11 +194,23 @@ export function FarmPassTab({ farm }: FarmPassTabProps) {
 
           <XpBar xp={passXp} level={passLevel} xpPerLevel={xpPerLevel} maxLevel={maxLevel} />
 
-          <div className="mt-2.5 flex gap-3 text-[10px] text-muted-foreground">
-            <span>🌱 Посев +1 XP</span>
-            <span>🌾 Сбор +3 XP</span>
-            <span>🐔 Корм +2 XP</span>
-            <span>⚙️ Крафт +5 XP</span>
+          <div className="mt-2.5 flex items-center justify-between gap-2">
+            <div className="flex gap-3 text-[10px] text-muted-foreground flex-wrap">
+              <span>🌱 Посев +1 XP</span>
+              <span>🌾 Сбор +3 XP</span>
+              <span>🐔 Корм +2 XP</span>
+              <span>⚙️ Крафт +5 XP</span>
+            </div>
+            {claimableCount > 0 && (
+              <motion.button
+                whileTap={{ scale: 0.93 }}
+                onClick={handleClaimAll}
+                disabled={isPending}
+                className="shrink-0 flex items-center gap-1 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-[11px] font-black px-3 py-1.5 rounded-2xl shadow-md disabled:opacity-60"
+              >
+                🎁 Забрать все ({claimableCount})
+              </motion.button>
+            )}
           </div>
         </div>
       </div>

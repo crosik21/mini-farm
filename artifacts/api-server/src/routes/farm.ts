@@ -1883,7 +1883,8 @@ router.post("/:telegramId/action", async (req, res) => {
       }
       npcOrders = generateNpcOrders(getLevelFromXp(xp));
       await db.update(farmStateTable).set({ npcRefreshesLeft, npcRefreshesDate: todayKey }).where(eq(farmStateTable.telegramId, telegramId));
-      return res.json({ ...serializeFarm({ ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, npcRefreshesLeft, npcRefreshesDate: todayKey }, telegramId), farmPass: serializeFarmPass(farmPassUS), achievements: buildAchievementsResponse(playerAchsUS) });
+      const npcRefreshLevel = getLevelFromXp(xp);
+      return res.json({ ...serializeFarm({ ...farm, plots, coins, gems, xp, level: npcRefreshLevel, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, npcRefreshesLeft, npcRefreshesDate: todayKey }, telegramId), farmPass: serializeFarmPass(farmPassUS), achievements: buildAchievementsResponse(playerAchsUS) });
 
     // ── BUY ENERGY ─────────────────────────────────────────────────────────────
     } else if (action === "buy_energy") {

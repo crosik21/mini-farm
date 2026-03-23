@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { getTelegramId, getTelegramUser, hapticFeedback } from "@/lib/telegram";
 import { FarmData, FarmAction } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -48,6 +48,9 @@ export function useFarm() {
     refetchInterval: 10000,
     staleTime: 5000,
     retry: 1,
+    // Keep previous data while refetching — prevents isLoading from becoming
+    // true during background refetches, so the loading screen never flashes.
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -58,11 +61,8 @@ export function useFarmAction() {
 
   const mutation = useMutation<FarmData, Error, FarmAction>({
     mutationFn: (data) => postAction(telegramId, data),
-    onMutate: async () => {
+    onMutate: () => {
       hapticFeedback("medium");
-      // Cancel any in-flight background refetches to prevent race condition where
-      // stale data overwrites the mutation result (e.g. booster timer resets)
-      await queryClient.cancelQueries({ queryKey: ["farm", telegramId] });
     },
     onSuccess: (data, variables) => {
       queryClient.setQueryData(["farm", telegramId], data);

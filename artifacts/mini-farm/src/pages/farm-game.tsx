@@ -1112,7 +1112,7 @@ function FarmSectionNav({
 }
 
 export default function FarmGame() {
-  const { data: farm, isLoading, isError, refetch, isFetching } = useFarm();
+  const { data: farm, isError, refetch, isFetching } = useFarm();
   const { mutate: performAction, isPending } = useFarmAction();
 
   const [activeTab, setActiveTab] = useState<Tab>("farm");
@@ -1225,7 +1225,7 @@ export default function FarmGame() {
     performAction({ action: "use_item", itemType, plotId });
   };
 
-  if (isLoading) {
+  if (!farm) {
     return (
       <div className="min-h-screen bg-green-50 flex flex-col items-center justify-center text-green-700">
         <div className="text-6xl mb-4 animate-bounce">🌱</div>

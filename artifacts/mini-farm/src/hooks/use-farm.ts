@@ -6,6 +6,21 @@ import { useToast } from "@/hooks/use-toast";
 
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+const FARM_CACHE_KEY = "mini_farm_cache";
+
+export function saveFarmCache(data: FarmData): void {
+  try { sessionStorage.setItem(FARM_CACHE_KEY, JSON.stringify(data)); } catch {}
+}
+
+function loadFarmCache(): FarmData | undefined {
+  try {
+    const raw = sessionStorage.getItem(FARM_CACHE_KEY);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as FarmData;
+    return typeof parsed?.coins === "number" ? parsed : undefined;
+  } catch { return undefined; }
+}
+
 function safeHeader(value: string): string {
   try {
     return encodeURIComponent(value);
@@ -48,9 +63,11 @@ export function useFarm() {
     refetchInterval: 10000,
     staleTime: 5000,
     retry: 1,
-    // Keep previous data while refetching — prevents isLoading from becoming
-    // true during background refetches, so the loading screen never flashes.
     placeholderData: keepPreviousData,
+    // Seed the cache with the last session's data so the game renders
+    // immediately on reload — no loading screen after the first visit.
+    initialData: loadFarmCache,
+    initialDataUpdatedAt: 0, // always treat as stale so fresh data is fetched right away
   });
 }
 

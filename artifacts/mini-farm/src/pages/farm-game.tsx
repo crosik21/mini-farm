@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence, useDragControls } from "framer-motion";
-import { useFarm, useFarmAction } from "@/hooks/use-farm";
+import { useFarm, useFarmAction, saveFarmCache } from "@/hooks/use-farm";
 import { PlotState, FarmData, WorldId } from "@/lib/types";
 import { CROPS, PRODUCTS, SEASON_CONFIG } from "@/lib/constants";
 import { EmojiImg } from "@/components/ui/emoji-img";
@@ -1114,6 +1114,12 @@ function FarmSectionNav({
 export default function FarmGame() {
   const { data: farm, isError, refetch, isFetching } = useFarm();
   const { mutate: performAction, isPending } = useFarmAction();
+
+  // Persist successful farm data to sessionStorage so the next page load
+  // can seed the React Query cache and skip the loading screen entirely.
+  useEffect(() => {
+    if (farm && typeof farm.coins === "number") saveFarmCache(farm);
+  }, [farm]);
 
   const [activeTab, setActiveTab] = useState<Tab>("farm");
   const [farmSection, setFarmSection] = useState<FarmSection>("field");

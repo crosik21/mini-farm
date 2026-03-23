@@ -1237,9 +1237,54 @@ export default function FarmGame() {
 
   if (!farm && !isError) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
-        <span className="text-6xl animate-bounce">🌱</span>
-        <p className="text-base font-medium text-muted-foreground">Загрузка фермы…</p>
+      <div
+        className="bg-background flex flex-col overflow-hidden w-full"
+        style={{ height: "var(--app-height, 100dvh)" }}
+      >
+        {/* Скелетон верхней панели */}
+        <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border/40">
+          <div className="w-9 h-9 rounded-full bg-muted animate-pulse" />
+          <div className="flex-1 flex flex-col gap-1.5">
+            <div className="h-2 w-24 rounded bg-muted animate-pulse" />
+            <div className="h-1.5 w-36 rounded bg-muted animate-pulse" />
+          </div>
+          <div className="flex gap-2">
+            <div className="h-6 w-14 rounded-full bg-muted animate-pulse" />
+            <div className="h-6 w-14 rounded-full bg-muted animate-pulse" />
+          </div>
+        </div>
+        {/* Скелетон вкладок */}
+        <div className="flex gap-4 px-4 py-2 border-b border-border/20">
+          {[0,1,2].map((i) => (
+            <div key={i} className="h-5 w-20 rounded bg-muted animate-pulse" />
+          ))}
+        </div>
+        {/* Скелетон поля */}
+        <div className="flex-1 flex flex-col items-center justify-start p-3 pt-4 gap-3">
+          <div className="w-full rounded-2xl overflow-hidden" style={{ background: "rgba(0,0,0,0.07)" }}>
+            <div className="grid grid-cols-3 gap-px p-2" style={{ background: "#c0845a" }}>
+              {Array.from({ length: 9 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="aspect-square rounded"
+                  style={{ background: "rgba(255,255,255,0.08)", animation: `pulse 1.4s ${(i * 0.07).toFixed(2)}s ease-in-out infinite` }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+        {/* Скелетон нижнего меню */}
+        <div
+          className="flex items-center justify-around px-4 border-t border-border/30"
+          style={{ paddingBottom: "calc(var(--safe-bottom, 0px) + 8px)", paddingTop: 10 }}
+        >
+          {[0,1,2,3,4].map((i) => (
+            <div key={i} className="flex flex-col items-center gap-1">
+              <div className="w-6 h-6 rounded bg-muted animate-pulse" />
+              <div className="w-10 h-2 rounded bg-muted animate-pulse" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

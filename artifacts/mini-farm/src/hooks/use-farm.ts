@@ -27,24 +27,31 @@ function getStableTelegramId(): string {
   // Пытаемся взять из Telegram контекста
   try {
     const tg = (window as any)?.Telegram?.WebApp;
-    if (tg?.initDataUnsafe?.user?.id) {
-      const realId = String(tg.initDataUnsafe.user.id);
+    const rawId = tg?.initDataUnsafe?.user?.id;
+    console.log("[Farm] Telegram initData:", { rawId, user: tg?.initDataUnsafe?.user });
+    if (rawId) {
+      const realId = String(rawId);
       localStorage.setItem("tg_real_id", realId);
       _stableId = realId;
+      console.log("[Farm] stableId set from Telegram:", realId);
       return realId;
     }
-  } catch {}
+  } catch (e) {
+    console.warn("[Farm] Telegram context error:", e);
+  }
 
   // Пробуем localStorage кеш
   try {
     const cached = localStorage.getItem("tg_real_id");
     if (cached) {
       _stableId = cached;
+      console.log("[Farm] stableId set from tg_real_id cache:", cached);
       return cached;
     }
     const demo = localStorage.getItem("demo_telegram_id");
     if (demo) {
       _stableId = demo;
+      console.log("[Farm] stableId set from demo cache:", demo);
       return demo;
     }
   } catch {}
@@ -53,12 +60,14 @@ function getStableTelegramId(): string {
   const newId = "demo_" + Math.floor(Math.random() * 10000);
   try { localStorage.setItem("demo_telegram_id", newId); } catch {}
   _stableId = newId;
+  console.warn("[Farm] stableId generated as demo:", newId);
   return newId;
 }
 
 async function fetchFarm(telegramId: string): Promise<FarmData> {
   const { username, firstName } = getTelegramUser();
   const url = `${API_BASE}/api/farm/${telegramId}`;
+  console.log("[Farm] fetchFarm →", telegramId);
   const res = await fetch(url, {
     headers: {
       "x-telegram-username": safeHeader(username),
@@ -66,10 +75,13 @@ async function fetchFarm(telegramId: string): Promise<FarmData> {
     },
   });
   if (!res.ok) throw new Error(`Ошибка загрузки фермы (${res.status})`);
-  return res.json();
+  const data: FarmData = await res.json();
+  console.log("[Farm] fetchFarm ← telegramId:", data.telegramId, "plots:", data.plots?.length, "coins:", data.coins);
+  return data;
 }
 
 async function postAction(telegramId: string, data: FarmAction): Promise<FarmData> {
+  console.log("[Farm] postAction →", telegramId, data.action);
   const res = await fetch(`${API_BASE}/api/farm/${telegramId}/action`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -79,7 +91,9 @@ async function postAction(telegramId: string, data: FarmAction): Promise<FarmDat
     const err = await res.json().catch(() => ({ error: "Неизвестная ошибка" }));
     throw new Error(err.error || "Ошибка действия");
   }
-  return res.json();
+  const result: FarmData = await res.json();
+  console.log("[Farm] postAction ← action:", data.action, "telegramId:", result.telegramId, "plots:", result.plots?.length, "coins:", result.coins);
+  return result;
 }
 
 export function useFarm() {

@@ -1267,6 +1267,7 @@ router.get("/:telegramId", async (req, res) => {
   try {
     const { telegramId } = req.params;
     const farm = await getOrCreateFarm(telegramId);
+    console.log(`[GET] id=${telegramId} plots=${farm.plots?.length} coins=${(farm as any).coins ?? "?"} username=${(farm as any).username ?? "none"}`);
 
     const cleanedSprinklers = ((farm.activeSprinklers as ActiveSprinkler[]) || [])
       .filter((s) => new Date(s.expiresAt) > new Date());
@@ -1315,6 +1316,7 @@ router.post("/:telegramId/action", async (req, res) => {
   try {
     const { telegramId } = req.params;
     const { action, plotId, cropType, quantity, animalId, buildingId, recipe } = req.body;
+    console.log(`[POST] id=${telegramId} action=${action}`);
 
     const farm = await getOrCreateFarm(telegramId);
 

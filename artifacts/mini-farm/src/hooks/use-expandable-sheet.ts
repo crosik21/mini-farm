@@ -1,5 +1,5 @@
-import { useState, useCallback, useRef, useEffect } from "react";
-import { useDragControls, useAnimationControls } from "framer-motion";
+import { useState, useCallback, useRef } from "react";
+import { useDragControls } from "framer-motion";
 
 /**
  * Provides drag + expand logic for bottom sheets.
@@ -12,13 +12,8 @@ import { useDragControls, useAnimationControls } from "framer-motion";
  *     <div ... onPointerDown={handlePointerDownHandle} />  ← drag handle
  *   </motion.div>
  */
-
-const SPRING = { type: "spring" as const, damping: 32, stiffness: 340 };
-const SPRING_CLOSE = { type: "spring" as const, damping: 30, stiffness: 260 };
-
 export function useExpandableSheet(onClose: () => void) {
   const dragControls = useDragControls();
-  const controls = useAnimationControls();
   const [isExpanded, setIsExpanded] = useState(false);
   const isExpandedRef = useRef(false);
 
@@ -26,27 +21,19 @@ export function useExpandableSheet(onClose: () => void) {
   // 15% of screen = the "hidden" top slice in default state
   const defaultY = Math.round(vh * 0.15);
 
-  // Start in default position after mount
-  useEffect(() => {
-    controls.start({ y: defaultY, transition: SPRING });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
+  // Keep ref in sync (avoids stale closure in onDragEnd)
   const expand = useCallback(() => {
     isExpandedRef.current = true;
     setIsExpanded(true);
-    controls.start({ y: 0, transition: SPRING });
-  }, [controls]);
-
+  }, []);
   const collapse = useCallback(() => {
     isExpandedRef.current = false;
     setIsExpanded(false);
-    controls.start({ y: defaultY, transition: SPRING });
-  }, [controls, defaultY]);
+  }, []);
 
   const handleDragEnd = useCallback(
     (_: unknown, info: { offset: { y: number }; velocity: { y: number } }) => {
       const { offset, velocity } = info;
-
       if (!isExpandedRef.current) {
         if (offset.y < -40 || velocity.y < -350) {
           // Swipe up → expand
@@ -54,21 +41,17 @@ export function useExpandableSheet(onClose: () => void) {
         } else if (offset.y > 80 || velocity.y > 240) {
           // Swipe down → close
           onClose();
-        } else {
-          // Snap back to default — explicit so the sheet never drifts below defaultY
-          controls.start({ y: defaultY, transition: SPRING });
         }
+        // else: framer springs back to animate target (isExpanded=false → y=defaultY)
       } else {
         if (offset.y > 70 || velocity.y > 240) {
           // Swipe down from expanded → collapse to default
           collapse();
-        } else {
-          // Snap back to expanded
-          controls.start({ y: 0, transition: SPRING });
         }
+        // else: framer springs back to animate target (isExpanded=true → y=0)
       }
     },
-    [controls, defaultY, onClose, expand, collapse],
+    [onClose, expand, collapse],
   );
 
   const handlePointerDownHandle = useCallback(
@@ -83,15 +66,18 @@ export function useExpandableSheet(onClose: () => void) {
     drag: "y" as const,
     dragControls,
     dragListener: false,
-    animate: controls,
-    // Constraint range covers default ↔ expanded travel; clamped to prevent
-    // the sheet drifting too far below the screen (which buries the drag handle).
+    // Allow travel between the two positions + a little extra for close gesture
     dragConstraints: { top: -defaultY, bottom: defaultY },
-    dragElastic: { top: 0.05, bottom: 0.08 }, // tight elastic on bottom = no big drift down
+    // Tight bottom elastic so the sheet can't drift far below defaultY (which buries drag handle)
+    dragElastic: { top: 0.05, bottom: 0.08 },
+    // No momentum — prevents velocity-based overshoot after release
     dragMomentum: false,
     onDragEnd: handleDragEnd,
+    // animate drives the resting position; framer auto-springs back here after drag
+    animate: { y: isExpanded ? 0 : defaultY },
     initial: { y: vh },
-    exit: { y: vh, transition: SPRING_CLOSE },
+    exit: { y: vh },
+    transition: { type: "spring" as const, damping: 32, stiffness: 340 },
     style: { height: "100vh" } as React.CSSProperties,
   };
 

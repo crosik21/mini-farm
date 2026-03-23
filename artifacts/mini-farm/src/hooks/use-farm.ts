@@ -118,7 +118,7 @@ export function useFarmAction() {
     },
     onSuccess: (data, variables) => {
       // Не обновлять кеш если ответ не содержит полных данных фермы
-      // (например, record_playtime возвращает только { ok, totalPlaySeconds, medals })
+      // (некоторые действия возвращают только { ok: true, ... } без данных игрока)
       if (!data.telegramId) {
         console.log("[Farm] Partial response for", variables.action, "— skipping cache update");
         return;

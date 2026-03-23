@@ -2483,15 +2483,6 @@ router.post("/:telegramId/action", async (req, res) => {
       const farmPassEs = await getOrCreateFarmPass(telegramId);
       return res.json({ ...serializeFarm({ ...farm, activeSkin: skinId }, telegramId), farmPass: serializeFarmPass(farmPassEs), achievements: buildAchievementsResponse(playerAchsEs) });
 
-    } else if (action === "record_playtime") {
-      const { seconds } = req.body;
-      if (typeof seconds !== "number" || seconds <= 0 || seconds > 600) return res.status(400).json({ error: "Invalid seconds" });
-      const newTotal = (farm.totalPlaySeconds ?? 0) + Math.floor(seconds);
-      await db.update(farmStateTable).set({ totalPlaySeconds: newTotal, updatedAt: new Date() })
-        .where(eq(farmStateTable.telegramId, telegramId));
-      const updatedMedalsRp = await checkAndAwardMedals(telegramId, { ...farm, totalPlaySeconds: newTotal });
-      return res.json({ ok: true, totalPlaySeconds: newTotal, medals: updatedMedalsRp });
-
     } else if (action === "equip_medal") {
       const { medalId } = req.body;
       const medalsData: MedalData = (farm.medals as MedalData) ?? emptyMedals();
@@ -2721,7 +2712,6 @@ function serializeFarm(farm: any, telegramId: string) {
     })(),
     activeSkin: (farm.activeSkin as string) ?? "default",
     ownedSkins: (farm.ownedSkins as string[]) ?? [],
-    totalPlaySeconds: (farm.totalPlaySeconds as number) ?? 0,
     medals: (farm.medals as { earned: { id: string; earnedAt: string }[]; equipped: string | null }) ?? { earned: [], equipped: null },
     updatedAt: farm.updatedAt instanceof Date ? farm.updatedAt.toISOString() : farm.updatedAt,
   };
@@ -2772,9 +2762,6 @@ async function checkAndAwardMedals(
   const fishInventory: Record<string, number> = (farm.fishInventory as Record<string, number>) ?? {};
   const totalFish = (fishTotal ?? 0) + Object.values(fishInventory).reduce((s, v) => s + v, 0);
   if (totalFish >= 10) award("fish_10");
-
-  // Playtime
-  if ((farm.totalPlaySeconds ?? 0) >= 3 * 3600) award("playtime_3h");
 
   // Golden skin
   const ownedSkins: string[] = (farm.ownedSkins as string[]) ?? [];

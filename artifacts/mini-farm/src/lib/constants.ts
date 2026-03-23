@@ -333,7 +333,6 @@ export const MEDALS: MedalDef[] = [
   { id: "streak_30",       emoji: "🔥🔥","name": "Несгибаемый",  rarity: "gold",      description: "30 дней подряд в игре",                      hint: "Заходи 30 дней подряд" },
   { id: "harvest_200",     emoji: "🏆", name: "Легенда жатвы",    rarity: "gold",      description: "Собрал урожай 200 раз",                      hint: "Собери урожай 200 раз" },
   { id: "level_10",        emoji: "🌟", name: "Мастер фермы",     rarity: "gold",      description: "Достиг 10 уровня",                           hint: "Прокачайся до уровня 10" },
-  { id: "playtime_3h",     emoji: "⏱️", name: "Преданный",        rarity: "gold",      description: "Провёл 3 часа в игре",                       hint: "Проведи 3+ часа в игре" },
   { id: "golden_skin",     emoji: "✨", name: "Избранный",         rarity: "legendary", description: "Разблокировал золотой скин",                  hint: "Купи золотой скин фермы" },
   { id: "gems_100",        emoji: "💎", name: "Кристальный лорд", rarity: "legendary", description: "Накопил 100 кристаллов",                      hint: "Накопи 100 кристаллов" },
 ];

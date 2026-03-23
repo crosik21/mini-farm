@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FarmData, AchievementState } from "@/lib/types";
 import { getLevelProgress, SEASON_CONFIG, ITEM_NAMES, ITEM_EMOJIS, MEDALS, MEDAL_RARITY_STYLE } from "@/lib/constants";
-import { Star, Wheat, Cat, Factory, Zap, Gem, Trophy, Sprout, Copy, ChevronDown, ChevronUp, Globe, Package, Tag, Flame, Clock, Medal } from "lucide-react";
+import { Star, Wheat, Cat, Factory, Zap, Gem, Trophy, Sprout, Copy, ChevronDown, ChevronUp, Globe, Package, Tag, Flame, Medal } from "lucide-react";
 import { EmojiImg } from "@/components/ui/emoji-img";
 import { useToast } from "@/hooks/use-toast";
 import { useFarmAction } from "@/hooks/use-farm";
@@ -138,12 +138,6 @@ export function ProfileTab({ farm }: { farm: FarmData }) {
     navigator.clipboard.writeText(farm.telegramId).then(() => toast({ title: "✅ ID скопирован!" }));
   };
 
-  const totalPlayHours = Math.floor((farm.totalPlaySeconds ?? 0) / 3600);
-  const totalPlayMinutes = Math.floor(((farm.totalPlaySeconds ?? 0) % 3600) / 60);
-  const playtimeLabel = totalPlayHours > 0
-    ? `${totalPlayHours}ч ${totalPlayMinutes}м`
-    : `${totalPlayMinutes}м`;
-
   const statCards = [
     { icon: <Wheat size={17} />,   label: "Грядок",    value: (farm.plots ?? []).length,             color: "text-amber-600" },
     { icon: <Cat size={17} />,     label: "Животных",  value: (farm.animals ?? []).length,            color: "text-pink-500" },
@@ -154,7 +148,6 @@ export function ProfileTab({ farm }: { farm: FarmData }) {
     { icon: <Zap size={17} />,     label: "Энергия",   value: `${farm.energy}/${farm.maxEnergy}`, color: "text-sky-500" },
     { icon: <Gem size={17} />,     label: "Кристаллы", value: farm.gems,                      color: "text-purple-500" },
     { icon: <Star size={17} />,    label: "Очки опыта",value: (farm.xp ?? 0).toLocaleString(), color: "text-orange-400" },
-    { icon: <Clock size={17} />,   label: "В игре",    value: playtimeLabel,                  color: "text-teal-500" },
   ];
 
   const achievements = farm.achievements ?? [];

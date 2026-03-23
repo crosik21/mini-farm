@@ -1138,10 +1138,6 @@ export default function FarmGame() {
   const { sheetProps: eventSheetProps, handlePointerDownHandle: eventHandlePointerDown } = useExpandableSheet(() => setShowEventShop(false));
   const { showOnboarding, finishOnboarding } = useOnboarding();
 
-  // ── Playtime tracking refs (must be before early returns) ─────────────────
-  const sessionSecondsRef = useRef(0);
-  const lastTickRef = useRef(Date.now());
-
   // Show streak modal once on first load if there's a pending reward
   useEffect(() => {
     if (farm && !streakShownRef.current && farm.streakRewardDay > 0) {
@@ -1149,33 +1145,6 @@ export default function FarmGame() {
       setStreakModalOpen(true);
     }
   }, [farm]);
-
-  // Playtime tracking — send accumulated seconds every 30s or on page hide
-  useEffect(() => {
-    const tick = setInterval(() => {
-      const now = Date.now();
-      sessionSecondsRef.current += Math.round((now - lastTickRef.current) / 1000);
-      lastTickRef.current = now;
-      if (sessionSecondsRef.current >= 60) {
-        const toSend = Math.min(sessionSecondsRef.current, 600);
-        sessionSecondsRef.current = 0;
-        performAction({ action: "record_playtime", seconds: toSend });
-      }
-    }, 30_000);
-    const flush = () => {
-      const now = Date.now();
-      sessionSecondsRef.current += Math.round((now - lastTickRef.current) / 1000);
-      lastTickRef.current = now;
-      if (sessionSecondsRef.current >= 5) {
-        const toSend = Math.min(sessionSecondsRef.current, 600);
-        sessionSecondsRef.current = 0;
-        performAction({ action: "record_playtime", seconds: toSend });
-      }
-    };
-    const onVisibility = () => { if (document.visibilityState === "hidden") flush(); };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => { clearInterval(tick); document.removeEventListener("visibilitychange", onVisibility); };
-  }, []);
 
   // Telegram init is handled in App.tsx on mount — nothing to do here
 

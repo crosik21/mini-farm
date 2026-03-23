@@ -111,6 +111,15 @@ export function useFarmAction() {
       } else if (variables.action === "claim_pass_reward") {
         hapticFeedback("success");
         toast({ title: "Награда пасса получена! 🎁" });
+      } else if (variables.action === "buy_pet") {
+        hapticFeedback("success");
+        toast({ title: "Питомец куплен! 🐾", description: "Активируй его в коллекции." });
+      } else if (variables.action === "activate_pet") {
+        hapticFeedback("success");
+        toast({ title: variables.petType ? "Питомец активирован! ✨" : "Питомец отключён" });
+      } else if (variables.action === "unlock_skill") {
+        hapticFeedback("success");
+        toast({ title: "Навык изучен! 🧠" });
       }
     },
     onError: (error) => {

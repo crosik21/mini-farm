@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Home, ShoppingBag, User, Shield, Users, Fish, Gift, Trophy, Store, MoreHorizontal, X, Package } from "lucide-react";
 
-export type Tab = "farm" | "shop" | "fishing" | "marketplace" | "friends" | "cases" | "pass" | "profile" | "admin";
+export type Tab = "farm" | "shop" | "fishing" | "marketplace" | "friends" | "cases" | "pass" | "profile" | "admin" | "pets" | "skills";
 
 const ADMIN_TELEGRAM_ID = "1335699132";
 
@@ -29,7 +29,7 @@ const TAB_COLORS = {
 };
 
 // Tabs in the "More" tray
-const MORE_TABS: Tab[] = ["marketplace", "cases", "friends", "pass"];
+const MORE_TABS: Tab[] = ["marketplace", "cases", "friends", "pass", "pets", "skills"];
 
 export function BottomNav({ activeTab, onTabChange, shopBadge, profileBadge, telegramId }: BottomNavProps) {
   const isAdmin = telegramId === ADMIN_TELEGRAM_ID;
@@ -87,6 +87,16 @@ export function BottomNav({ activeTab, onTabChange, shopBadge, profileBadge, tel
       id: "pass",
       label: "Пасс",
       icon: <Trophy size={22} strokeWidth={1.7} />,
+    },
+    {
+      id: "pets",
+      label: "Питомцы",
+      icon: <span className="text-[22px] leading-none">🐾</span>,
+    },
+    {
+      id: "skills",
+      label: "Навыки",
+      icon: <span className="text-[22px] leading-none">🧠</span>,
     },
     ...(isAdmin
       ? [{
@@ -175,9 +185,9 @@ export function BottomNav({ activeTab, onTabChange, shopBadge, profileBadge, tel
         )}
       </AnimatePresence>
 
-      {/* Main nav bar */}
+      {/* Main nav bar — fixed at bottom so it's always visible regardless of viewport changes */}
       <div
-        className="flex-shrink-0 relative z-30"
+        className="fixed bottom-0 left-0 right-0 z-30"
         style={{
           background: "var(--nav-bg, rgba(255,255,255,0.94))",
           backdropFilter: "blur(16px)",

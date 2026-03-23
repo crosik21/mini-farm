@@ -234,21 +234,34 @@ function applyTelegramTheme(tg: TelegramWebApp) {
 }
 
 /**
- * Update --app-height using Telegram's stable viewport height if available,
- * otherwise use window.innerHeight as fallback.
+ * Update --app-height using Telegram's stable viewport height if available.
+ * We deliberately avoid window.innerHeight on mobile because it shrinks when
+ * the virtual keyboard opens, causing the layout to collapse. If no Telegram
+ * context is available we fall back to the CSS `100svh` (small viewport height)
+ * which excludes the browser chrome and stays stable.
  */
 export function updateAppHeight() {
   const tg = getTelegramContext();
-  const h = tg?.viewportStableHeight
-    ? `${tg.viewportStableHeight}px`
-    : `${window.innerHeight}px`;
-  document.documentElement.style.setProperty('--app-height', h);
+
+  if (tg?.viewportStableHeight && tg.viewportStableHeight > 100) {
+    document.documentElement.style.setProperty('--app-height', `${tg.viewportStableHeight}px`);
+    return;
+  }
+
+  // Non-Telegram or Telegram hasn't supplied stable height yet.
+  // Use svh/dvh cascade: svh is smaller (excludes browser chrome) and stable.
+  // Inline style fallback: screen.height gives the physical device height.
+  const cssH = window.innerHeight > 100 ? `${window.innerHeight}px` : '100svh';
+  document.documentElement.style.setProperty('--app-height', cssH);
 }
 
 export const initTelegramApp = () => {
   const tg = getTelegramContext();
   if (tg) {
     tg.ready();
+
+    // Expand to full screen immediately — critical for correct viewport height
+    try { tg.expand(); } catch { /* older clients */ }
 
     try {
       if (typeof tg.enableClosingConfirmation === 'function') {
@@ -269,8 +282,11 @@ export const initTelegramApp = () => {
     const onThemeChanged = () => applyTelegramTheme(tg);
     tg.onEvent('themeChanged', onThemeChanged);
 
-    // Listen for viewport changes and update height
-    const onViewportChanged = () => updateAppHeight();
+    // Listen for viewport changes — only update when height is stable
+    const onViewportChanged = () => {
+      // Use rAF to let Telegram settle the viewport before measuring
+      requestAnimationFrame(() => updateAppHeight());
+    };
     tg.onEvent('viewportChanged', onViewportChanged);
 
   } else {
@@ -283,7 +299,8 @@ export const initTelegramApp = () => {
     });
   }
 
-  // Always set initial height and listen for resize
+  // Set initial height immediately, then again after 300ms to catch late Telegram init
   updateAppHeight();
+  setTimeout(updateAppHeight, 300);
   window.addEventListener('resize', updateAppHeight, { passive: true });
 };

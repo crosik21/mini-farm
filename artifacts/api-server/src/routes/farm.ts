@@ -1277,6 +1277,42 @@ router.post("/:telegramId/action", async (req, res) => {
     // Storm shelter: barn building converts storm 10% spoil into 10% potent harvest (+50% coins)
     const hasShelter = buildings.some((b) => BUILDING_CONFIG[b.type]?.shelter === true);
 
+    // ── Pet + Skill bonuses ───────────────────────────────────────────────────
+    const currentPets = (farm.pets as PetsInventory | null) ?? { owned: [] };
+    const activePetType = currentPets.owned.find((p) => p.active)?.type ?? null;
+    let unlockedSkills: string[] = (farm.unlockedSkills as string[] | null) ?? [];
+    let skillPoints: number = (farm.skillPoints as number) ?? 0;
+
+    // Grow speed multiplier (< 1 = faster)
+    let growSpeedMult = 1.0;
+    if (activePetType === "rabbit") growSpeedMult *= 0.90;
+    if (unlockedSkills.includes("grow_1")) growSpeedMult *= 0.90;
+    if (unlockedSkills.includes("grow_2")) growSpeedMult *= 0.80;
+
+    // Harvest XP multiplier
+    let harvestXpMult = 1.0;
+    if (activePetType === "bee") harvestXpMult += 0.20;
+    if (activePetType === "owl") harvestXpMult += 0.15;
+
+    // Harvest + sell coin multiplier
+    let harvestCoinMult = 1.0;
+    if (activePetType === "cat") harvestCoinMult += 0.12;
+    if (unlockedSkills.includes("rich_harvest")) harvestCoinMult += 0.15;
+
+    // Flat bonus coins per harvest (master_harvest skill)
+    const masterHarvestBonus = unlockedSkills.includes("master_harvest") ? 8 : 0;
+
+    // Seed price multiplier (< 1 = cheaper)
+    let seedDiscountMult = 1.0;
+    if (unlockedSkills.includes("discount_1")) seedDiscountMult *= 0.92;
+    if (unlockedSkills.includes("discount_2")) seedDiscountMult *= 0.88;
+
+    // Fish coin multiplier
+    let fishCoinMult = 1.0;
+    if (activePetType === "fox") fishCoinMult += 0.25;
+    if (unlockedSkills.includes("fish_luck")) fishCoinMult += 0.20;
+    if (unlockedSkills.includes("master_fishing")) fishCoinMult += 0.30;
+
     // ── PLANT ──────────────────────────────────────────────────────────────────
     if (action === "plant") {
       if (plotId === undefined || !cropType) return res.status(400).json({ error: "plotId и cropType обязательны" });
@@ -1299,7 +1335,7 @@ router.post("/:telegramId/action", async (req, res) => {
       const baseMultiplier = (SEASON_GROWTH_MULTIPLIER[season] ?? 1) * worldCfg.growMultiplier;
       const baseGrowMs = Math.ceil(cfg.growSec * baseMultiplier) * 1000;
       const growMult = baseMultiplier * WEATHER_GROW_MULT[currentWeather];
-      const growSec = Math.ceil(cfg.growSec * growMult);
+      const growSec = Math.ceil(cfg.growSec * growMult * growSpeedMult);
       const now = new Date();
       const readyAt = new Date(now.getTime() + growSec * 1000);
 
@@ -1331,8 +1367,9 @@ router.post("/:telegramId/action", async (req, res) => {
           const extraDouble = worldCfg.doubleChanceBonus > 0 && Math.random() < worldCfg.doubleChanceBonus;
           const harvestQty = (plot.doubleHarvest || extraDouble) ? 2 : 1;
           inventory[plot.cropType as keyof CropInventory] = (inventory[plot.cropType as keyof CropInventory] ?? 0) + harvestQty;
-          xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier);
+          xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier * harvestXpMult);
           coins += Math.ceil((cfg?.sellPrice ?? 10) * sellMult * harvestQty * 0.5);
+          coins += masterHarvestBonus * harvestQty;
           energy -= HARVEST_ENERGY;
           plots = plots.map((p) => p.id === plotId ? { ...p, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null, doubleHarvest: undefined } : p);
           quests = updateQuestProgress(quests, "harvest", plot.cropType, harvestQty);
@@ -1350,7 +1387,8 @@ router.post("/:telegramId/action", async (req, res) => {
         const extraDouble = worldCfg.doubleChanceBonus > 0 && Math.random() < worldCfg.doubleChanceBonus;
         const harvestQty = (plot.doubleHarvest || extraDouble) ? 2 : 1;
         inventory[plot.cropType as keyof CropInventory] = (inventory[plot.cropType as keyof CropInventory] ?? 0) + harvestQty;
-        xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier);
+        xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier * harvestXpMult);
+        coins += masterHarvestBonus * harvestQty;
         energy -= HARVEST_ENERGY;
         plots = plots.map((p) => p.id === plotId ? { ...p, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null, doubleHarvest: undefined } : p);
         quests = updateQuestProgress(quests, "harvest", plot.cropType, harvestQty);
@@ -1382,8 +1420,9 @@ router.post("/:telegramId/action", async (req, res) => {
             const extraDouble = worldCfg.doubleChanceBonus > 0 && Math.random() < worldCfg.doubleChanceBonus;
             const harvestQty = (plot.doubleHarvest || extraDouble) ? 2 : 1;
             inventory[plot.cropType as keyof CropInventory] = (inventory[plot.cropType as keyof CropInventory] ?? 0) + harvestQty;
-            xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier);
+            xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier * harvestXpMult);
             coins += Math.ceil((cfg?.sellPrice ?? 10) * sellMult * harvestQty * 0.5);
+            coins += masterHarvestBonus * harvestQty;
             quests = updateQuestProgress(quests, "harvest", plot.cropType!, harvestQty);
             harvestedIds.push(plot.id);
             totalHarvested += harvestQty;
@@ -1400,7 +1439,8 @@ router.post("/:telegramId/action", async (req, res) => {
         const extraDouble = worldCfg.doubleChanceBonus > 0 && Math.random() < worldCfg.doubleChanceBonus;
         const harvestQty = (plot.doubleHarvest || extraDouble) ? 2 : 1;
         inventory[plot.cropType as keyof CropInventory] = (inventory[plot.cropType as keyof CropInventory] ?? 0) + harvestQty;
-        xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier);
+        xp += Math.ceil((cfg?.xp ?? 5) * sellMult * harvestQty * worldCfg.xpMultiplier * harvestXpMult);
+        coins += masterHarvestBonus * harvestQty;
         quests = updateQuestProgress(quests, "harvest", plot.cropType!, harvestQty);
         harvestedIds.push(plot.id);
         totalHarvested += harvestQty;
@@ -1452,7 +1492,7 @@ router.post("/:telegramId/action", async (req, res) => {
       if (!cropType || !quantity) return res.status(400).json({ error: "cropType и quantity обязательны" });
       const cfg = getActiveCropConfig()[cropType];
       if (!cfg) return res.status(400).json({ error: "Неизвестная культура" });
-      const cost = cfg.seedCost * quantity;
+      const cost = Math.max(1, Math.floor(cfg.seedCost * quantity * seedDiscountMult));
       if (coins < cost) return res.status(400).json({ error: "Недостаточно монет" });
       coins -= cost;
       seeds[cropType as keyof CropInventory] = (seeds[cropType as keyof CropInventory] ?? 0) + quantity;
@@ -1510,7 +1550,7 @@ router.post("/:telegramId/action", async (req, res) => {
       const available = inventory[cropType as keyof CropInventory] ?? 0;
       if (available < quantity) return res.status(400).json({ error: "Недостаточно урожая" });
       const sellMult = SEASON_SELL_MULTIPLIER[season] ?? 1;
-      const earned = Math.floor(cfg.sellPrice * sellMult) * quantity;
+      const earned = Math.floor(cfg.sellPrice * sellMult * harvestCoinMult) * quantity;
       coins += earned;
       inventory[cropType as keyof CropInventory] -= quantity;
       quests = updateQuestProgress(quests, "sell_crops", cropType, quantity);
@@ -1663,7 +1703,7 @@ router.post("/:telegramId/action", async (req, res) => {
         if (n <= 0) continue;
         const cfg = activeCfg[cropId];
         if (!cfg) continue;
-        const earned = Math.floor(cfg.sellPrice * sellMult) * n;
+        const earned = Math.floor(cfg.sellPrice * sellMult * harvestCoinMult) * n;
         coins += earned;
         totalEarned += earned;
         totalSoldQty += n;
@@ -2270,7 +2310,7 @@ router.post("/:telegramId/action", async (req, res) => {
       return res.json({ ...farmOut, caseResult, farmPass: serializeFarmPass(farmPassCase), achievements: buildAchievementsResponse(playerAchsCase) });
 
     } else if (action === "buy_skin") {
-      const { skinId } = body;
+      const { skinId } = req.body;
       const SKIN_DEFS: Record<string, { priceCoin?: number; priceGem?: number; free?: boolean }> = {
         default:  { free: true },
         green:    { priceCoin: 800 },
@@ -2300,7 +2340,7 @@ router.post("/:telegramId/action", async (req, res) => {
       return res.json({ ...serializeFarm({ ...farm, coins, gems, ownedSkins: newOwned, activeSkin: skinId, medals: medalsBs }, telegramId), farmPass: serializeFarmPass(farmPassBs), achievements: buildAchievementsResponse(playerAchsBs) });
 
     } else if (action === "equip_skin") {
-      const { skinId } = body;
+      const { skinId } = req.body;
       const owned: string[] = (farm.ownedSkins as string[]) ?? [];
       if (skinId !== "default" && !owned.includes(skinId)) return res.status(400).json({ error: "Скин не куплен" });
       await db.update(farmStateTable).set({ activeSkin: skinId, updatedAt: new Date() })
@@ -2310,7 +2350,7 @@ router.post("/:telegramId/action", async (req, res) => {
       return res.json({ ...serializeFarm({ ...farm, activeSkin: skinId }, telegramId), farmPass: serializeFarmPass(farmPassEs), achievements: buildAchievementsResponse(playerAchsEs) });
 
     } else if (action === "record_playtime") {
-      const { seconds } = body;
+      const { seconds } = req.body;
       if (typeof seconds !== "number" || seconds <= 0 || seconds > 600) return res.status(400).json({ error: "Invalid seconds" });
       const newTotal = (farm.totalPlaySeconds ?? 0) + Math.floor(seconds);
       await db.update(farmStateTable).set({ totalPlaySeconds: newTotal, updatedAt: new Date() })
@@ -2319,7 +2359,7 @@ router.post("/:telegramId/action", async (req, res) => {
       return res.json({ ok: true, totalPlaySeconds: newTotal, medals: updatedMedalsRp });
 
     } else if (action === "equip_medal") {
-      const { medalId } = body;
+      const { medalId } = req.body;
       const medalsData: MedalData = (farm.medals as MedalData) ?? emptyMedals();
       if (medalId !== null && !medalsData.earned.some((m) => m.id === medalId)) {
         return res.status(400).json({ error: "Медаль не получена" });
@@ -2331,6 +2371,68 @@ router.post("/:telegramId/action", async (req, res) => {
       const farmPassEm = await getOrCreateFarmPass(telegramId);
       return res.json({ ...serializeFarm({ ...farm, medals: updated }, telegramId), farmPass: serializeFarmPass(farmPassEm), achievements: buildAchievementsResponse(playerAchsEm) });
 
+    // ── BUY PET ────────────────────────────────────────────────────────────────
+    } else if (action === "buy_pet") {
+      const { petType, priceGem } = req.body as { petType?: string; priceGem?: number };
+      if (!petType) return res.status(400).json({ error: "petType обязателен" });
+      const petsInv = (farm.pets as PetsInventory | null) ?? { owned: [] };
+      if (petsInv.owned.some((p) => p.type === petType)) return res.status(400).json({ error: "Питомец уже куплен" });
+      const cost = typeof priceGem === "number" ? priceGem : 0;
+      if (cost > 0 && gems < cost) return res.status(400).json({ error: "Недостаточно кристаллов" });
+      const newGems = cost > 0 ? gems - cost : gems;
+      const newPets: PetsInventory = { owned: [...petsInv.owned, { type: petType, active: false }] };
+      await db.update(farmStateTable).set({ gems: newGems, pets: newPets, updatedAt: new Date() })
+        .where(eq(farmStateTable.telegramId, telegramId));
+      const farmPassBP = await getOrCreateFarmPass(telegramId);
+      const playerAchsBP = await getPlayerAchievements(telegramId);
+      return res.json({ ...serializeFarm({ ...farm, gems: newGems, pets: newPets }, telegramId), farmPass: serializeFarmPass(farmPassBP), achievements: buildAchievementsResponse(playerAchsBP) });
+
+    // ── ACTIVATE PET ───────────────────────────────────────────────────────────
+    } else if (action === "activate_pet") {
+      const { petType } = req.body as { petType?: string | null };
+      const petsInv = (farm.pets as PetsInventory | null) ?? { owned: [] };
+      if (petType !== null && petType !== undefined && !petsInv.owned.some((p) => p.type === petType)) {
+        return res.status(400).json({ error: "Питомец не куплен" });
+      }
+      const newPets: PetsInventory = {
+        owned: petsInv.owned.map((p) => ({ ...p, active: p.type === petType })),
+      };
+      await db.update(farmStateTable).set({ pets: newPets, updatedAt: new Date() })
+        .where(eq(farmStateTable.telegramId, telegramId));
+      const farmPassAP = await getOrCreateFarmPass(telegramId);
+      const playerAchsAP = await getPlayerAchievements(telegramId);
+      return res.json({ ...serializeFarm({ ...farm, pets: newPets }, telegramId), farmPass: serializeFarmPass(farmPassAP), achievements: buildAchievementsResponse(playerAchsAP) });
+
+    // ── UNLOCK SKILL ───────────────────────────────────────────────────────────
+    } else if (action === "unlock_skill") {
+      const { skillId } = req.body as { skillId?: string };
+      if (!skillId) return res.status(400).json({ error: "skillId обязателен" });
+      const currSkills: string[] = (farm.unlockedSkills as string[] | null) ?? [];
+      const currPoints: number = (farm.skillPoints as number) ?? 0;
+      if (currSkills.includes(skillId)) return res.status(400).json({ error: "Навык уже изучен" });
+      const SKILL_COSTS: Record<string, number> = {
+        grow_1: 1, grow_2: 2, master_harvest: 3,
+        discount_1: 1, discount_2: 2, rich_harvest: 2,
+        fish_sense: 1, fish_luck: 2, master_fishing: 3,
+      };
+      const SKILL_PREREQS: Record<string, string | null> = {
+        grow_1: null, grow_2: "grow_1", master_harvest: "grow_2",
+        discount_1: null, discount_2: "discount_1", rich_harvest: "discount_2",
+        fish_sense: null, fish_luck: "fish_sense", master_fishing: "fish_luck",
+      };
+      const cost = SKILL_COSTS[skillId];
+      if (cost === undefined) return res.status(400).json({ error: "Неизвестный навык" });
+      const prereq = SKILL_PREREQS[skillId];
+      if (prereq && !currSkills.includes(prereq)) return res.status(400).json({ error: "Сначала изучи предыдущий навык" });
+      if (currPoints < cost) return res.status(400).json({ error: "Недостаточно очков навыков" });
+      const newSkills = [...currSkills, skillId];
+      const newPoints = currPoints - cost;
+      await db.update(farmStateTable).set({ unlockedSkills: newSkills, skillPoints: newPoints, updatedAt: new Date() })
+        .where(eq(farmStateTable.telegramId, telegramId));
+      const farmPassUS = await getOrCreateFarmPass(telegramId);
+      const playerAchsUS = await getPlayerAchievements(telegramId);
+      return res.json({ ...serializeFarm({ ...farm, unlockedSkills: newSkills, skillPoints: newPoints }, telegramId), farmPass: serializeFarmPass(farmPassUS), achievements: buildAchievementsResponse(playerAchsUS) });
+
     } else {
       return res.status(400).json({ error: "Неизвестное действие" });
     }
@@ -2338,7 +2440,7 @@ router.post("/:telegramId/action", async (req, res) => {
     const level = getLevelFromXp(xp);
     if (level > farm.level) {
       maxEnergy = Math.min(60, 30 + level * 2);
-      xp = xp;
+      skillPoints += (level - farm.level); // +1 skill point per level gained
     }
 
     // Keep worlds in sync with active plots
@@ -2351,6 +2453,9 @@ router.post("/:telegramId/action", async (req, res) => {
       worlds, activeWorldId,
       eventCoins,
       toolTiers,
+      pets: currentPets,
+      skillPoints,
+      unlockedSkills,
       weatherType: currentWeather,
       weatherUpdatedAt: new Date(),
       updatedAt: new Date(),
@@ -2364,7 +2469,7 @@ router.post("/:telegramId/action", async (req, res) => {
 
     const playerAchs = await getPlayerAchievements(telegramId);
     const farmPass = await getOrCreateFarmPass(telegramId);
-    const updatedFarmForMedals = { ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, eventCoins, toolTiers };
+    const updatedFarmForMedals = { ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, eventCoins, toolTiers, pets: currentPets, skillPoints, unlockedSkills };
     const updatedMedals = await checkAndAwardMedals(telegramId, updatedFarmForMedals);
     res.json({ ...serializeFarm({ ...updatedFarmForMedals, medals: updatedMedals }, telegramId), farmPass: serializeFarmPass(farmPass), achievements: buildAchievementsResponse(playerAchs) });
   } catch (err) {
@@ -2463,6 +2568,8 @@ function serializeFarm(farm: any, telegramId: string) {
     toolTiers: (farm.toolTiers as ToolTiers) || emptyToolTiers(),
     toolTierConfig: TOOL_TIER_CONFIG,
     pets: (farm.pets as PetsInventory) ?? { owned: [] },
+    skillPoints: (farm.skillPoints as number) ?? 0,
+    unlockedSkills: (farm.unlockedSkills as string[]) ?? [],
     activeSkin: (farm.activeSkin as string) ?? "default",
     ownedSkins: (farm.ownedSkins as string[]) ?? [],
     totalPlaySeconds: (farm.totalPlaySeconds as number) ?? 0,

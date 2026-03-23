@@ -22,6 +22,8 @@ import { StreakModal } from "@/components/game/StreakModal";
 import { FishingTab } from "@/components/game/FishingTab";
 import { MarketplaceTab } from "@/components/game/MarketplaceTab";
 import { FarmPassTab } from "@/components/game/FarmPassTab";
+import PetsTab from "@/components/game/PetsTab";
+import SkillTreeTab from "@/components/game/SkillTreeTab";
 import { OnboardingOverlay, useOnboarding } from "@/components/game/OnboardingOverlay";
 import { SKINS } from "@/lib/constants";
 import { Sprout, Cat, Factory } from "lucide-react";
@@ -1213,7 +1215,7 @@ export default function FarmGame() {
     );
   }
 
-  if (isError || !farm) {
+  if (isError) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
         <div className="text-6xl mb-4">🥀</div>
@@ -1230,7 +1232,17 @@ export default function FarmGame() {
     );
   }
 
-  const claimableQuests = farm.quests.filter((q) => q.completed && !q.claimed).length;
+  // Guard against stale/malformed data (e.g. cached from a broken API response)
+  if (!farm || typeof farm.coins !== "number") {
+    return (
+      <div className="min-h-screen bg-green-50 flex flex-col items-center justify-center text-green-700">
+        <div className="text-6xl mb-4 animate-bounce">🌱</div>
+        <h1 className="font-bold text-2xl animate-pulse">Загрузка фермы…</h1>
+      </div>
+    );
+  }
+
+  const claimableQuests = (farm.quests ?? []).filter((q) => q.completed && !q.claimed).length;
   const claimableAchievements = (farm.achievements ?? []).filter((a) => a.completed && !a.claimed).length;
   const profileBadge = claimableAchievements + (farm.streakRewardDay > 0 ? 1 : 0);
   const telegramId = farm.telegramId;
@@ -1245,7 +1257,10 @@ export default function FarmGame() {
         <TopBar farm={farm} onEnergyClick={() => setEnergyModalOpen(true)} />
       )}
 
-      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col">
+      <main
+        className="flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col"
+        style={{ paddingBottom: "calc(var(--safe-bottom, 0px) + 72px)" }}
+      >
         <AnimatePresence mode="wait">
           {activeTab === "farm" && (
             <motion.div key="farm-wrapper" className="flex flex-col min-h-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
@@ -1323,6 +1338,18 @@ export default function FarmGame() {
           {activeTab === "admin" && (
             <motion.div key="admin" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
               <AdminTab />
+            </motion.div>
+          )}
+
+          {activeTab === "pets" && (
+            <motion.div key="pets" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+              <PetsTab farm={farm} />
+            </motion.div>
+          )}
+
+          {activeTab === "skills" && (
+            <motion.div key="skills" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
+              <SkillTreeTab farm={farm} />
             </motion.div>
           )}
         </AnimatePresence>

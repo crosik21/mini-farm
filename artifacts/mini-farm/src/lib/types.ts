@@ -328,13 +328,11 @@ export type ToolTiers = {
 
 export type PetEntry = {
   type: string;
-  obtainedAt: string;
-  source: string;
+  active: boolean;
 };
 
 export type PetsInventory = {
   owned: PetEntry[];
-  active: string | null;
 };
 
 export type PassReward = {
@@ -402,6 +400,6 @@ export type FarmAction =
   | { action: "equip_skin"; skinId: string }
   | { action: "record_playtime"; seconds: number }
   | { action: "equip_medal"; medalId: string | null }
-  | { action: "buy_pet"; petId: string }
-  | { action: "activate_pet"; petId: string | null }
+  | { action: "buy_pet"; petType: string; priceGem?: number }
+  | { action: "activate_pet"; petType: string | null }
   | { action: "unlock_skill"; skillId: string };

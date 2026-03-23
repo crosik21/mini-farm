@@ -187,7 +187,16 @@ router.post("/sell", async (req, res) => {
     if ((fishInv[fishType] ?? 0) < quantity) return errResult("Недостаточно рыбы");
 
     fishInv[fishType] -= quantity;
-    const earned = meta.sellPrice * quantity;
+
+    // Apply fish coin bonuses from active pet + unlocked skills
+    const activePetType = ((farm.pets as { owned: { type: string; active: boolean }[] } | null)?.owned ?? []).find((p) => p.active)?.type ?? null;
+    const unlockedSkills: string[] = (farm.unlockedSkills as string[] | null) ?? [];
+    let fishCoinMult = 1.0;
+    if (activePetType === "fox") fishCoinMult += 0.25;
+    if (unlockedSkills.includes("fish_luck")) fishCoinMult += 0.20;
+    if (unlockedSkills.includes("master_fishing")) fishCoinMult += 0.30;
+
+    const earned = Math.floor(meta.sellPrice * quantity * fishCoinMult);
     const newCoins = farm.coins + earned;
 
     await tx

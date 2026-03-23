@@ -693,7 +693,7 @@ function FieldView({
 
   return (
     <div
-      className="flex flex-col"
+      className="flex flex-col min-h-full"
       style={{ background: `linear-gradient(180deg, ${bg1} 0%, ${bg2} 100%)` }}
       onPointerDown={handleSwipeStart}
       onPointerUp={handleSwipeEnd}
@@ -945,7 +945,8 @@ function FieldView({
           + farm.items.wateringCans + farm.items.sprinklers;
         const totalSeeds = Object.values(farm.seeds).reduce((a, b) => a + b, 0);
         return (
-          <div className="flex justify-end gap-2.5 px-3 pb-3 pt-1">
+          <div className="sticky flex justify-end gap-2.5 px-3 pb-2 pt-1 pointer-events-none" style={{ bottom: "calc(var(--safe-bottom, 0px) + 72px)" }}>
+            <div className="flex gap-2.5 pointer-events-auto">
             {/* Shop FAB */}
             <button
               onClick={() => setShopOpen(true)}
@@ -972,6 +973,7 @@ function FieldView({
                 </span>
               )}
             </button>
+            </div>
           </div>
         );
       })()}

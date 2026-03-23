@@ -10,6 +10,8 @@ export interface PlotState {
 export interface ItemInventory {
   wateringCans: number;
   sprinklers: number;
+  fertilizers?: number;
+  lightnings?: number;
 }
 
 export interface ActiveSprinkler {
@@ -315,9 +317,10 @@ export type ToolTierDef = {
   emoji: string;
   coinCost: number;
   gemCost: number;
-  growthReduction: number;
+  speedMultiplier: number;
   doubleChance: number;
   plotsAffected?: number;
+  area3x3?: boolean;
   durationMs?: number;
   bonusDesc: string;
 };
@@ -387,8 +390,8 @@ export type FarmAction =
   | { action: "harvest_all" }
   | { action: "unlock_world"; worldId: WorldId }
   | { action: "switch_world"; worldId: WorldId }
-  | { action: "buy_item"; itemType: "watering_can" | "sprinkler"; quantity: number }
-  | { action: "use_item"; itemType: "watering_can" | "sprinkler"; plotId: number }
+  | { action: "buy_item"; itemType: "watering_can" | "sprinkler" | "fertilizer" | "lightning"; quantity: number }
+  | { action: "use_item"; itemType: "watering_can" | "sprinkler" | "fertilizer" | "lightning"; plotId: number }
   | { action: "open_case"; caseId: string }
   | { action: "set_ref_code"; code: string }
   | { action: "claim_streak_reward" }

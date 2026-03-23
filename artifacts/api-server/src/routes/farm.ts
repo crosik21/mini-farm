@@ -232,7 +232,7 @@ const ITEM_CONFIG = {
     gemCostSingle: 3,
     gemCostPack: 7,   // pack of 3
     packQty: 3,
-    growthReduction: 0.50,  // reduces remaining grow time by 50%
+    speedMultiplier: 2,  // ×2 faster growth
     doubleHarvestChance: 0.20,
   },
   sprinkler: {
@@ -240,14 +240,26 @@ const ITEM_CONFIG = {
     gemCostSingle: 6,
     gemCostPack: 10,  // pack of 2
     packQty: 2,
-    growthReduction: 0.40,  // reduces remaining grow time by 40% per plot
+    speedMultiplier: 1.5,  // ×1.5 faster growth
     doubleHarvestChance: 0.15,
     durationMs: 5 * 60 * 1000, // 5 minutes active
+  },
+  fertilizer: {
+    name: "Удобрение",
+    gemCostSingle: 2,
+    gemCostPack: 5,   // pack of 3
+    packQty: 3,
+  },
+  lightning: {
+    name: "Молния",
+    gemCostSingle: 5,
+    gemCostPack: 12,  // pack of 3
+    packQty: 3,
   },
 };
 
 function emptyItems(): ItemInventory {
-  return { wateringCans: 0, sprinklers: 0 };
+  return { wateringCans: 0, sprinklers: 0, fertilizers: 0, lightnings: 0 };
 }
 
 function emptyToolTiers(): ToolTiers {
@@ -261,23 +273,24 @@ type ToolTierDef = {
   emoji: string;
   coinCost: number;
   gemCost: number;
-  growthReduction: number;
+  speedMultiplier: number;
   doubleChance: number;
   plotsAffected?: number;
+  area3x3?: boolean;
   durationMs?: number;
   bonusDesc: string;
 };
 
 const TOOL_TIER_CONFIG: Record<"watering_can" | "sprinkler", ToolTierDef[]> = {
   watering_can: [
-    { name: "Обычная лейка",    emoji: "🪣", coinCost: 0,   gemCost: 0, growthReduction: 0.50, doubleChance: 0.20, bonusDesc: "−50% время роста, 20% двойной урожай" },
-    { name: "Серебряная лейка", emoji: "🪣", coinCost: 300, gemCost: 0, growthReduction: 0.65, doubleChance: 0.25, bonusDesc: "−65% время роста, 25% двойной урожай" },
-    { name: "Золотая лейка",    emoji: "✨", coinCost: 0,   gemCost: 5, growthReduction: 0.80, doubleChance: 0.30, plotsAffected: 3, bonusDesc: "−80% время роста, 30% двойной урожай, поливает 3 грядки" },
+    { name: "Обычная лейка",    emoji: "🪣", coinCost: 0,   gemCost: 0, speedMultiplier: 2, doubleChance: 0.20, bonusDesc: "×2 скорость роста, 20% двойной урожай" },
+    { name: "Серебряная лейка", emoji: "🪣", coinCost: 300, gemCost: 0, speedMultiplier: 3, doubleChance: 0.25, bonusDesc: "×3 скорость роста, 25% двойной урожай" },
+    { name: "Золотая лейка",    emoji: "✨", coinCost: 0,   gemCost: 5, speedMultiplier: 4, doubleChance: 0.30, plotsAffected: 3, bonusDesc: "×4 скорость роста, 30% двойной урожай, 3 грядки" },
   ],
   sprinkler: [
-    { name: "Обычный спринклер",    emoji: "💦", coinCost: 0,   gemCost: 0, growthReduction: 0.40, doubleChance: 0.15, durationMs: 5 * 60 * 1000,  bonusDesc: "−40% время роста, 15% двойной урожай, 5 мин" },
-    { name: "Серебряный спринклер", emoji: "💦", coinCost: 400, gemCost: 0, growthReduction: 0.55, doubleChance: 0.20, durationMs: 7 * 60 * 1000,  bonusDesc: "−55% время роста, 20% двойной урожай, 7 мин" },
-    { name: "Золотой спринклер",    emoji: "⚡", coinCost: 0,   gemCost: 8, growthReduction: 0.70, doubleChance: 0.25, durationMs: 10 * 60 * 1000, bonusDesc: "−70% время роста, 25% двойной урожай, 10 мин" },
+    { name: "Обычный спринклер",    emoji: "💦", coinCost: 0,   gemCost: 0, speedMultiplier: 1.5, doubleChance: 0.15, durationMs: 5 * 60 * 1000,  bonusDesc: "×1.5 скорость роста, 15% двойной урожай, 5 мин, 5 клеток" },
+    { name: "Серебряный спринклер", emoji: "💦", coinCost: 400, gemCost: 0, speedMultiplier: 2,   doubleChance: 0.20, durationMs: 8 * 60 * 1000,  bonusDesc: "×2 скорость роста, 20% двойной урожай, 8 мин, 5 клеток" },
+    { name: "Золотой спринклер",    emoji: "⚡", coinCost: 0,   gemCost: 8, speedMultiplier: 3,   doubleChance: 0.25, durationMs: 12 * 60 * 1000, area3x3: true, bonusDesc: "×3 скорость роста, 25% двойной урожай, 12 мин, 3×3 клетки" },
   ],
 };
 
@@ -647,7 +660,7 @@ router.get("/seed-shop", async (req, res) => {
   }
 });
 
-// Gets plus-shape plot IDs centered on centerPlotId
+// Gets plus-shape (cross) plot IDs centered on centerPlotId
 function getSprinklerAffected(centerPlotId: number, plots: PlotState[]): number[] {
   const cols = plots.length <= 9 ? 3 : plots.length <= 16 ? 4 : 5;
   const plotIds = new Set(plots.map((p) => p.id));
@@ -661,16 +674,49 @@ function getSprinklerAffected(centerPlotId: number, plots: PlotState[]): number[
   return affected;
 }
 
-function applyWateringEffect(plot: PlotState, reductionFactor: number, doubleChance: number): PlotState {
+// Gets 3×3 square of plot IDs centered on centerPlotId (gold sprinkler)
+function get3x3Affected(centerPlotId: number, plots: PlotState[]): number[] {
+  const cols = plots.length <= 9 ? 3 : plots.length <= 16 ? 4 : 5;
+  const plotIds = new Set(plots.map((p) => p.id));
+  const row = Math.floor(centerPlotId / cols);
+  const col = centerPlotId % cols;
+  const affected: number[] = [];
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      const newRow = row + dr;
+      const newCol = col + dc;
+      if (newRow >= 0 && newCol >= 0 && newCol < cols) {
+        const pid = newRow * cols + newCol;
+        if (plotIds.has(pid)) affected.push(pid);
+      }
+    }
+  }
+  return affected;
+}
+
+// Accelerates plot growth by speedMultiplier (e.g. ×2 = half the remaining time)
+function applyWateringEffect(plot: PlotState, speedMultiplier: number, doubleChance: number): PlotState {
   if (plot.status !== "growing" || !plot.readyAt) return plot;
   const now = Date.now();
   const readyAt = new Date(plot.readyAt).getTime();
   const remaining = Math.max(0, readyAt - now);
   if (remaining <= 0) return plot;
-  const reduction = remaining * reductionFactor;
-  const newReadyAt = new Date(readyAt - reduction).toISOString();
+  const newRemaining = remaining / speedMultiplier;
+  const newReadyAt = new Date(now + newRemaining).toISOString();
   const doubleHarvest = Math.random() < doubleChance;
   return { ...plot, readyAt: newReadyAt, doubleHarvest: doubleHarvest || plot.doubleHarvest };
+}
+
+// Guarantees double harvest on a growing plot
+function applyFertilizerEffect(plot: PlotState): PlotState {
+  if (plot.status !== "growing" || !plot.readyAt) return plot;
+  return { ...plot, doubleHarvest: true };
+}
+
+// Instantly completes a growing plot
+function applyLightningEffect(plot: PlotState): PlotState {
+  if (plot.status !== "growing" || !plot.readyAt) return plot;
+  return { ...plot, readyAt: new Date().toISOString(), status: "ready" as const };
 }
 const HARVEST_ENERGY = 1;
 const PLANT_ENERGY = 2;
@@ -1919,7 +1965,8 @@ router.post("/:telegramId/action", async (req, res) => {
     // ── BUY ITEM (premium) ─────────────────────────────────────────────────────
     } else if (action === "buy_item") {
       const { itemType, quantity: qty = 1 } = req.body;
-      if (!itemType || !["watering_can", "sprinkler"].includes(itemType)) {
+      const validItemTypes = ["watering_can", "sprinkler", "fertilizer", "lightning"];
+      if (!itemType || !validItemTypes.includes(itemType)) {
         return res.status(400).json({ error: "Неверный тип предмета" });
       }
       const cfg = ITEM_CONFIG[itemType as keyof typeof ITEM_CONFIG];
@@ -1929,8 +1976,12 @@ router.post("/:telegramId/action", async (req, res) => {
       gems -= gemCost;
       if (itemType === "watering_can") {
         items.wateringCans = (items.wateringCans ?? 0) + qty;
-      } else {
+      } else if (itemType === "sprinkler") {
         items.sprinklers = (items.sprinklers ?? 0) + qty;
+      } else if (itemType === "fertilizer") {
+        items.fertilizers = (items.fertilizers ?? 0) + qty;
+      } else if (itemType === "lightning") {
+        items.lightnings = (items.lightnings ?? 0) + qty;
       }
 
     // ── USE ITEM ────────────────────────────────────────────────────────────────
@@ -1949,9 +2000,9 @@ router.post("/:telegramId/action", async (req, res) => {
         // Gold tier (tier 2): water 3 adjacent plots instead of 1
         if (wcTier === 2 && wcTierDef.plotsAffected && wcTierDef.plotsAffected >= 3) {
           const affected3 = getSprinklerAffected(targetPlotId, plots).slice(0, 3);
-          plots = plots.map((p) => affected3.includes(p.id) ? applyWateringEffect(p, wcTierDef.growthReduction, wcTierDef.doubleChance) : p);
+          plots = plots.map((p) => affected3.includes(p.id) ? applyWateringEffect(p, wcTierDef.speedMultiplier, wcTierDef.doubleChance) : p);
         } else {
-          plots = plots.map((p) => p.id === targetPlotId ? applyWateringEffect(p, wcTierDef.growthReduction, wcTierDef.doubleChance) : p);
+          plots = plots.map((p) => p.id === targetPlotId ? applyWateringEffect(p, wcTierDef.speedMultiplier, wcTierDef.doubleChance) : p);
         }
         items.wateringCans -= 1;
 
@@ -1960,9 +2011,10 @@ router.post("/:telegramId/action", async (req, res) => {
         const spTier = toolTiers.sprinkler ?? 0;
         const spTierDef = TOOL_TIER_CONFIG.sprinkler[spTier];
         const spDuration = spTierDef.durationMs ?? ITEM_CONFIG.sprinkler.durationMs;
-        const affectedIds = getSprinklerAffected(targetPlotId, plots);
+        // Gold sprinkler: 3×3 area; others: cross (plus) shape
+        const affectedIds = spTierDef.area3x3 ? get3x3Affected(targetPlotId, plots) : getSprinklerAffected(targetPlotId, plots);
         plots = plots.map((p) =>
-          affectedIds.includes(p.id) ? applyWateringEffect(p, spTierDef.growthReduction, spTierDef.doubleChance) : p
+          affectedIds.includes(p.id) ? applyWateringEffect(p, spTierDef.speedMultiplier, spTierDef.doubleChance) : p
         );
         const now = new Date();
         const newSprinkler: ActiveSprinkler = {
@@ -1974,6 +2026,20 @@ router.post("/:telegramId/action", async (req, res) => {
         };
         activeSprinklers.push(newSprinkler);
         items.sprinklers -= 1;
+
+      } else if (itemType === "fertilizer") {
+        if ((items.fertilizers ?? 0) <= 0) return res.status(400).json({ error: "Нет удобрений в инвентаре" });
+        const plot = plots.find((p) => p.id === targetPlotId);
+        if (!plot || plot.status !== "growing") return res.status(400).json({ error: "Грядка не растёт" });
+        plots = plots.map((p) => p.id === targetPlotId ? applyFertilizerEffect(p) : p);
+        items.fertilizers = (items.fertilizers ?? 1) - 1;
+
+      } else if (itemType === "lightning") {
+        if ((items.lightnings ?? 0) <= 0) return res.status(400).json({ error: "Нет молний в инвентаре" });
+        const plot = plots.find((p) => p.id === targetPlotId);
+        if (!plot || plot.status !== "growing") return res.status(400).json({ error: "Грядка не растёт" });
+        plots = plots.map((p) => p.id === targetPlotId ? applyLightningEffect(p) : p);
+        items.lightnings = (items.lightnings ?? 1) - 1;
 
       } else {
         return res.status(400).json({ error: "Неверный тип предмета" });

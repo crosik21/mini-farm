@@ -70,7 +70,7 @@ function InventorySheet({
 }: {
   farm: FarmData;
   onClose: () => void;
-  onActivateItem: (item: "watering_can" | "sprinkler") => void;
+  onActivateItem: (item: "watering_can" | "sprinkler" | "fertilizer" | "lightning") => void;
   onStartDrag: (item: DragItemState) => void;
 }) {
   const seedEntries = Object.entries(farm.seeds).filter(([, c]) => c > 0);
@@ -207,9 +207,11 @@ function InventorySheet({
               </p>
               <div className="flex flex-col gap-2">
                 {[
-                  { key: "watering_can" as const, emoji: "🪣", name: "Лейка", desc: "Ускоряет рост · шанс ×2", count: farm.items.wateringCans, color: "blue" },
-                  { key: "sprinkler"    as const, emoji: "💦", name: "Спринклер", desc: "Поливает 5 клеток сразу",  count: farm.items.sprinklers,   color: "cyan"  },
-                ].map(({ key, emoji, name, desc, count, color }) => {
+                  { key: "watering_can" as const, emoji: "🪣", name: "Лейка", desc: "Ускоряет рост · шанс двойного урожая", count: farm.items.wateringCans ?? 0, color: "blue", drag: true },
+                  { key: "sprinkler"    as const, emoji: "💦", name: "Спринклер", desc: "Поливает несколько клеток сразу",        count: farm.items.sprinklers ?? 0,   color: "cyan", drag: true },
+                  { key: "fertilizer"  as const, emoji: "🌱", name: "Удобрение", desc: "100% двойной урожай с грядки",          count: farm.items.fertilizers ?? 0,  color: "green", drag: false },
+                  { key: "lightning"   as const, emoji: "⚡", name: "Молния",    desc: "Мгновенное созревание грядки",           count: farm.items.lightnings ?? 0,   color: "yellow", drag: false },
+                ].map(({ key, emoji, name, desc, count, color, drag }) => {
                   const pressing = pressingId === key;
                   return (
                     <motion.div
@@ -217,8 +219,8 @@ function InventorySheet({
                       animate={{ scale: pressing ? 1.04 : 1 }}
                       transition={{ type: "spring", stiffness: 400, damping: 18 }}
                       className={`flex items-center gap-3 bg-${color}-50 border border-${color}-200 rounded-2xl px-4 py-3 select-none`}
-                      style={count > 0 ? { touchAction: "none", cursor: "grab" } : undefined}
-                      onPointerDown={count > 0 ? e => startLongPress(e, { type: "booster", boosterType: key, emoji, x: e.clientX, y: e.clientY }) : undefined}
+                      style={count > 0 && drag ? { touchAction: "none", cursor: "grab" } : undefined}
+                      onPointerDown={count > 0 && drag ? e => startLongPress(e, { type: "booster", boosterType: key, emoji, x: e.clientX, y: e.clientY }) : undefined}
                       onPointerUp={cancelLongPress}
                       onPointerLeave={cancelLongPress}
                       onPointerCancel={cancelLongPress}
@@ -256,7 +258,7 @@ function SeedShopSheet({
 }: {
   farm: FarmData;
   onClose: () => void;
-  onActivateItem: (item: "watering_can" | "sprinkler") => void;
+  onActivateItem: (item: "watering_can" | "sprinkler" | "fertilizer" | "lightning") => void;
 }) {
   const { mutate, isPending } = useFarmAction();
   const dragControls = useDragControls();
@@ -338,15 +340,18 @@ function SeedShopSheet({
                   <span className="font-bold text-purple-500">✨ Премиум предметы</span> покупаются за 💎 кристаллы. Используй с поля или через инвентарь.
                 </div>
                 {[
-                  { key: "watering_can" as const, emoji: "🪣", name: "Лейка", desc: "Ускоряет рост ×2 + шанс двойного урожая", single: 3, pack: 7, packQty: 3, accent: "blue", count: farm.items?.wateringCans ?? 0 },
-                  { key: "sprinkler"    as const, emoji: "💦", name: "Спринклер", desc: "Поливает 5 грядок крестом, 5 минут", single: 6, pack: 10, packQty: 2, accent: "cyan", count: farm.items?.sprinklers ?? 0 },
+                  { key: "watering_can" as const, emoji: "🪣", name: "Лейка",      desc: "×2–×4 скорость роста + шанс двойного урожая", subdesc: "Уровень прокачки влияет на мощность", single: 3, pack: 7,  packQty: 3, accent: "blue",   count: farm.items?.wateringCans ?? 0 },
+                  { key: "sprinkler"    as const, emoji: "💦", name: "Спринклер",  desc: "×1.5–×3 скорость, несколько клеток сразу",    subdesc: "Золотой — зона 3×3, 12 минут",         single: 6, pack: 10, packQty: 2, accent: "cyan",   count: farm.items?.sprinklers ?? 0 },
+                  { key: "fertilizer"  as const, emoji: "🌱", name: "Удобрение",  desc: "100% гарантия двойного урожая с грядки",      subdesc: "Применить — нажми на растущую грядку", single: 2, pack: 5,  packQty: 3, accent: "green",  count: farm.items?.fertilizers ?? 0 },
+                  { key: "lightning"   as const, emoji: "⚡", name: "Молния",     desc: "Мгновенно созревает одна грядка",             subdesc: "Применить — нажми на растущую грядку", single: 5, pack: 12, packQty: 3, accent: "amber",  count: farm.items?.lightnings ?? 0 },
                 ].map((item) => (
                   <div key={item.key} className={`bg-${item.accent}-500/8 border-2 border-${item.accent}-500/30 rounded-2xl overflow-hidden`}>
                     <div className="p-4 flex items-center gap-3">
                       <div className={`w-12 h-12 bg-${item.accent}-500 rounded-xl flex items-center justify-center shadow-md shrink-0`}><EmojiImg emoji={item.emoji} size={26} /></div>
                       <div className="flex-1 min-w-0">
                         <div className="font-black text-base">{item.name}</div>
-                        <div className="text-xs text-muted-foreground">{item.desc}</div>
+                        <div className="text-xs text-muted-foreground leading-snug">{item.desc}</div>
+                        <div className="text-[10px] text-muted-foreground/70 leading-snug">{item.subdesc}</div>
                         <div className="text-xs font-bold mt-0.5">В инвентаре: <span className="font-black">{item.count} шт.</span></div>
                       </div>
                       {item.count > 0 && (
@@ -573,11 +578,11 @@ function FieldView({
   isExpanding: boolean;
   floatingRewards: FloatingReward[];
   onRewardDone: (id: number) => void;
-  activeItemMode?: "watering_can" | "sprinkler" | null;
+  activeItemMode?: "watering_can" | "sprinkler" | "fertilizer" | "lightning" | null;
   onCancelItemMode?: () => void;
-  onActivateItem: (item: "watering_can" | "sprinkler") => void;
+  onActivateItem: (item: "watering_can" | "sprinkler" | "fertilizer" | "lightning") => void;
   onPlantDirect: (plotId: number, cropId: string) => void;
-  onUseItemDirect: (plotId: number, itemType: "watering_can" | "sprinkler") => void;
+  onUseItemDirect: (plotId: number, itemType: "watering_can" | "sprinkler" | "fertilizer" | "lightning") => void;
   onHarvestAll: () => void;
   onOpenMap: () => void;
   onSwitchWorld: (worldId: WorldId) => void;
@@ -776,11 +781,17 @@ function FieldView({
             exit={{ opacity: 0, y: -8 }}
             className="mx-3 mb-1.5 flex items-center gap-2 bg-blue-600 text-white text-sm font-bold px-3 py-2 rounded-xl shadow-lg"
           >
-            <span className="text-lg">{activeItemMode === "watering_can" ? "🪣" : "💦"}</span>
+            <span className="text-lg">
+              {activeItemMode === "watering_can" ? "🪣" : activeItemMode === "sprinkler" ? "💦" : activeItemMode === "fertilizer" ? "🌱" : "⚡"}
+            </span>
             <span className="flex-1 text-xs">
               {activeItemMode === "watering_can"
                 ? "Выбери грядку — ускорит рост и даст шанс ×2"
-                : "Выбери грядку — спринклер польёт 5 клеток"}
+                : activeItemMode === "sprinkler"
+                ? "Выбери грядку — спринклер польёт несколько клеток"
+                : activeItemMode === "fertilizer"
+                ? "Выбери растущую грядку — 100% двойной урожай"
+                : "Выбери растущую грядку — мгновенное созревание!"}
             </span>
             <button onClick={onCancelItemMode} className="text-white/80 font-bold text-lg leading-none">✕</button>
           </motion.div>
@@ -942,7 +953,7 @@ function FieldView({
       {(() => {
         const totalItems = Object.values(farm.seeds).reduce((a, b) => a + b, 0)
           + Object.values(farm.inventory as Record<string, number>).reduce((a, b) => a + b, 0)
-          + farm.items.wateringCans + farm.items.sprinklers;
+          + (farm.items.wateringCans ?? 0) + (farm.items.sprinklers ?? 0) + (farm.items.fertilizers ?? 0) + (farm.items.lightnings ?? 0);
         const totalSeeds = Object.values(farm.seeds).reduce((a, b) => a + b, 0);
         return (
           <div className="sticky flex justify-end gap-2.5 px-3 pb-2 pt-1 pointer-events-none" style={{ bottom: "calc(var(--safe-bottom, 0px) + 72px)" }}>
@@ -1112,7 +1123,7 @@ export default function FarmGame() {
   const [streakModalOpen, setStreakModalOpen] = useState(false);
   const [showEventShop, setShowEventShop] = useState(false);
   const [floatingRewards, setFloatingRewards] = useState<FloatingReward[]>([]);
-  const [activeItemMode, setActiveItemMode] = useState<"watering_can" | "sprinkler" | null>(null);
+  const [activeItemMode, setActiveItemMode] = useState<"watering_can" | "sprinkler" | "fertilizer" | "lightning" | null>(null);
   const rewardIdRef = useRef(0);
   const streakShownRef = useRef(false);
   const { showOnboarding, finishOnboarding } = useOnboarding();
@@ -1160,12 +1171,18 @@ export default function FarmGame() {
 
   const handlePlotTap = (plot: PlotState, rect: DOMRect) => {
     if (activeItemMode) {
-      if (plot.status === "growing" || plot.status === "empty") {
+      const needsGrowing = activeItemMode === "fertilizer" || activeItemMode === "lightning";
+      const canApply = needsGrowing ? plot.status === "growing" : (plot.status === "growing" || plot.status === "empty");
+      if (canApply) {
         performAction({ action: "use_item", itemType: activeItemMode, plotId: plot.id });
         const cx = rect.left + rect.width / 2;
         const cy = rect.top;
         const id = ++rewardIdRef.current;
-        const label = activeItemMode === "watering_can" ? "🪣 Полито!" : "💦 Спринклер!";
+        const label =
+          activeItemMode === "watering_can" ? "🪣 Полито!" :
+          activeItemMode === "sprinkler" ? "💦 Спринклер!" :
+          activeItemMode === "fertilizer" ? "🌱 Удобрено!" :
+          "⚡ Мгновенный рост!";
         setFloatingRewards((prev) => [...prev, { id, x: cx - 44, y: cy - 16, lines: [label] }]);
       }
       setActiveItemMode(null);
@@ -1186,7 +1203,7 @@ export default function FarmGame() {
     }
   };
 
-  const handleActivateItem = (itemType: "watering_can" | "sprinkler") => {
+  const handleActivateItem = (itemType: "watering_can" | "sprinkler" | "fertilizer" | "lightning") => {
     setActiveItemMode(itemType);
     setActiveTab("farm");
     setFarmSection("field");
@@ -1204,7 +1221,7 @@ export default function FarmGame() {
     performAction({ action: "plant", plotId, cropType: cropId });
   };
 
-  const handleUseItemDirect = (plotId: number, itemType: "watering_can" | "sprinkler") => {
+  const handleUseItemDirect = (plotId: number, itemType: "watering_can" | "sprinkler" | "fertilizer" | "lightning") => {
     performAction({ action: "use_item", itemType, plotId });
   };
 

@@ -6,7 +6,7 @@ import { Droplets, Wind, ShoppingCart, Info, ArrowUp, ChevronRight } from "lucid
 
 interface PremiumShopTabProps {
   farm: FarmData;
-  onActivateItem: (itemType: "watering_can" | "sprinkler") => void;
+  onActivateItem: (itemType: "watering_can" | "sprinkler" | "fertilizer" | "lightning") => void;
 }
 
 interface ItemCardProps {

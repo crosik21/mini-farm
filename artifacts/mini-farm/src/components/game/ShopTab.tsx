@@ -11,7 +11,7 @@ type ShopSection = "seeds" | "market" | "quests" | "skins";
 
 interface ShopTabProps {
   farm: FarmData;
-  onActivateItem?: (itemType: "watering_can" | "sprinkler") => void;
+  onActivateItem?: (itemType: "watering_can" | "sprinkler" | "fertilizer" | "lightning") => void;
 }
 
 export function ShopTab({ farm }: ShopTabProps) {

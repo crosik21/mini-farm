@@ -123,6 +123,12 @@ export function useFarmAction() {
       } else if (variables.action === "unlock_skill") {
         hapticFeedback("success");
         toast({ title: "Навык изучен! 🧠" });
+      } else if (variables.action === "buy_item") {
+        hapticFeedback("success");
+        const itemEmoji = variables.itemType === "watering_can" ? "🪣" : variables.itemType === "sprinkler" ? "💦" : variables.itemType === "fertilizer" ? "🌱" : "⚡";
+        toast({ title: `${itemEmoji} Куплено!`, description: `${variables.quantity} шт. в инвентаре.` });
+      } else if (variables.action === "use_item") {
+        hapticFeedback("success");
       }
     },
     onError: (error) => {

@@ -25,7 +25,12 @@ function HomePage() {
 
   return (
     <>
-      {splashDone && <FarmGame />}
+      {/* FarmGame is always mounted so the data fetch starts during SplashScreen.
+          Hidden via CSS until the user dismisses the splash — this prevents the
+          brief "Загрузка фермы…" flash that occurred when FarmGame first mounted. */}
+      <div style={{ display: splashDone ? "contents" : "none" }}>
+        <FarmGame />
+      </div>
       {!splashDone && (
         <SplashScreen
           onPlay={dismiss}

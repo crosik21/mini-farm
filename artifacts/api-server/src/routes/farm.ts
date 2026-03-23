@@ -1171,9 +1171,28 @@ async function getOrCreateFarm(telegramId: string) {
 
     const rawWorlds = (farm.worlds as WorldsData) || defaultWorlds();
     const activeWorldId = (farm.activeWorldId as WorldId) || "main";
+
+    // Защита: если грядки пустые у существующей фермы — восстановить
+    let safePlots = plots;
+    if (safePlots.length === 0) {
+      // Попробуем взять из worlds.main.plots
+      const mainWorldPlots = rawWorlds?.main?.plots;
+      if (Array.isArray(mainWorldPlots) && mainWorldPlots.length > 0) {
+        safePlots = updatePlotStatuses(mainWorldPlots, currentWeatherForNorm);
+      } else {
+        // Крайний случай: создаём 9 пустых грядок
+        safePlots = Array.from({ length: 9 }, (_, i) => ({
+          id: i, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null,
+        }));
+      }
+      // Синхронизируем worlds.main.plots
+      if (!rawWorlds.main) rawWorlds.main = { plots: safePlots, unlocked: true };
+      else rawWorlds.main = { ...rawWorlds.main, plots: safePlots };
+    }
+
     return {
       ...farm,
-      plots,
+      plots: safePlots,
       animals,
       buildings,
       season,
@@ -1260,6 +1279,7 @@ router.get("/:telegramId", async (req, res) => {
     const firstNameHeader = decodeHeader(req.headers["x-telegram-firstname"] as string | undefined);
     const updatePayload: Record<string, unknown> = {
       plots: farm.plots,
+      worlds: farm.worlds,
       animals: farm.animals,
       buildings: farm.buildings,
       energy: farm.energy,
@@ -1541,7 +1561,19 @@ router.post("/:telegramId/action", async (req, res) => {
       worlds[activeWorldId] = { ...(worlds[activeWorldId] || { unlocked: true }), plots };
       // Load target world's plots
       const targetWorld = worlds[targetWorldId]!;
-      plots = updatePlotStatuses(targetWorld.plots, currentWeather);
+      let targetPlots = targetWorld.plots;
+      // Фолбэк: если грядки целевого мира пусты — восстановить (для main берём текущие plots)
+      if (!Array.isArray(targetPlots) || targetPlots.length === 0) {
+        if (targetWorldId === "main") {
+          targetPlots = plots; // текущие грядки главного мира
+        } else {
+          targetPlots = Array.from({ length: 9 }, (_, i) => ({
+            id: i, cropType: null, status: "empty" as const, plantedAt: null, readyAt: null,
+          }));
+        }
+        worlds[targetWorldId] = { ...targetWorld, plots: targetPlots };
+      }
+      plots = updatePlotStatuses(targetPlots, currentWeather);
       activeWorldId = targetWorldId;
 
     // ── BUY SEEDS ──────────────────────────────────────────────────────────────

@@ -14,6 +14,48 @@ function safeHeader(value: string): string {
   }
 }
 
+// Стабильный ID на всю сессию — не меняется при ре-рендерах.
+// Если Telegram контекст доступен сразу — берём реальный ID и фиксируем его.
+// Если ещё не доступен — берём из localStorage. Не генерируем demo ID
+// пока не убедились что реального нет.
+let _stableId: string | null = null;
+
+function getStableTelegramId(): string {
+  // Если уже определили — возвращаем
+  if (_stableId) return _stableId;
+
+  // Пытаемся взять из Telegram контекста
+  try {
+    const tg = (window as any)?.Telegram?.WebApp;
+    if (tg?.initDataUnsafe?.user?.id) {
+      const realId = String(tg.initDataUnsafe.user.id);
+      localStorage.setItem("tg_real_id", realId);
+      _stableId = realId;
+      return realId;
+    }
+  } catch {}
+
+  // Пробуем localStorage кеш
+  try {
+    const cached = localStorage.getItem("tg_real_id");
+    if (cached) {
+      _stableId = cached;
+      return cached;
+    }
+    const demo = localStorage.getItem("demo_telegram_id");
+    if (demo) {
+      _stableId = demo;
+      return demo;
+    }
+  } catch {}
+
+  // Только в крайнем случае — demo ID
+  const newId = "demo_" + Math.floor(Math.random() * 10000);
+  try { localStorage.setItem("demo_telegram_id", newId); } catch {}
+  _stableId = newId;
+  return newId;
+}
+
 async function fetchFarm(telegramId: string): Promise<FarmData> {
   const { username, firstName } = getTelegramUser();
   const url = `${API_BASE}/api/farm/${telegramId}`;
@@ -41,7 +83,7 @@ async function postAction(telegramId: string, data: FarmAction): Promise<FarmDat
 }
 
 export function useFarm() {
-  const telegramId = getTelegramId();
+  const telegramId = getStableTelegramId();
   return useQuery<FarmData>({
     queryKey: ["farm", telegramId],
     queryFn: () => fetchFarm(telegramId),
@@ -51,7 +93,7 @@ export function useFarm() {
 }
 
 export function useFarmAction() {
-  const telegramId = getTelegramId();
+  const telegramId = getStableTelegramId();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -61,6 +103,11 @@ export function useFarmAction() {
       hapticFeedback("medium");
     },
     onSuccess: (data, variables) => {
+      // Защита: не перезаписывать кеш если ответ содержит чужой telegramId
+      if (data.telegramId && data.telegramId !== telegramId) {
+        console.warn("Farm response telegramId mismatch, ignoring cache update");
+        return;
+      }
       queryClient.setQueryData(["farm", telegramId], data);
       if (variables.action === "harvest") hapticFeedback("success");
       else if (variables.action === "collect_product") hapticFeedback("success");

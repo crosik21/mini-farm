@@ -1227,9 +1227,11 @@ export default function FarmGame() {
 
   if (!farm) {
     return (
-      <div className="min-h-screen bg-green-50 flex flex-col items-center justify-center text-green-700">
-        <div className="text-6xl mb-4 animate-bounce">🌱</div>
-        <h1 className="font-bold text-2xl animate-pulse">Загрузка фермы…</h1>
+      <div className="min-h-screen bg-background">
+        <div className="fixed top-4 right-4 flex items-center gap-2 bg-card border border-border rounded-full px-3 py-1.5 shadow-sm z-50">
+          <span className="text-sm animate-spin">🌱</span>
+          <span className="text-xs text-muted-foreground">Загрузка…</span>
+        </div>
       </div>
     );
   }

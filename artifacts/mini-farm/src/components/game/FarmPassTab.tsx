@@ -151,9 +151,9 @@ export function FarmPassTab({ farm }: FarmPassTabProps) {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col">
       {/* Header */}
-      <div className="p-4 pb-3 flex-shrink-0">
+      <div className="p-4 pb-3">
         <div className="bg-gradient-to-br from-amber-500/15 to-purple-500/15 border border-amber-400/30 rounded-3xl p-4">
           <div className="flex items-center justify-between mb-3">
             <div>
@@ -190,7 +190,7 @@ export function FarmPassTab({ farm }: FarmPassTabProps) {
       </div>
 
       {/* Reward tracks - horizontal scroll */}
-      <div className="flex-1 overflow-y-auto px-4 pb-8">
+      <div className="px-4 pb-8">
         {/* Premium track label */}
         <div className="flex items-center gap-2 mb-2">
           <div className={`text-[10px] font-black px-2 py-1 rounded-full ${isPremium ? "bg-amber-400 text-black" : "bg-muted text-muted-foreground"}`}>

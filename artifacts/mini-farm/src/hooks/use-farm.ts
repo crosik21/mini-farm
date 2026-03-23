@@ -58,8 +58,11 @@ export function useFarmAction() {
 
   const mutation = useMutation<FarmData, Error, FarmAction>({
     mutationFn: (data) => postAction(telegramId, data),
-    onMutate: () => {
+    onMutate: async () => {
       hapticFeedback("medium");
+      // Cancel any in-flight background refetches to prevent race condition where
+      // stale data overwrites the mutation result (e.g. booster timer resets)
+      await queryClient.cancelQueries({ queryKey: ["farm", telegramId] });
     },
     onSuccess: (data, variables) => {
       queryClient.setQueryData(["farm", telegramId], data);

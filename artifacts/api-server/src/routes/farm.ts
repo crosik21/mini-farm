@@ -694,7 +694,8 @@ function get3x3Affected(centerPlotId: number, plots: PlotState[]): number[] {
   return affected;
 }
 
-// Accelerates plot growth by speedMultiplier (e.g. ×2 = half the remaining time)
+// Accelerates plot growth by speedMultiplier (e.g. ×2 = half the remaining time).
+// Clears baseGrowMs so weather recalculation doesn't override the boosted readyAt.
 function applyWateringEffect(plot: PlotState, speedMultiplier: number, doubleChance: number): PlotState {
   if (plot.status !== "growing" || !plot.readyAt) return plot;
   const now = Date.now();
@@ -704,7 +705,8 @@ function applyWateringEffect(plot: PlotState, speedMultiplier: number, doubleCha
   const newRemaining = remaining / speedMultiplier;
   const newReadyAt = new Date(now + newRemaining).toISOString();
   const doubleHarvest = Math.random() < doubleChance;
-  return { ...plot, readyAt: newReadyAt, doubleHarvest: doubleHarvest || plot.doubleHarvest };
+  // baseGrowMs = null prevents updatePlotStatuses from overwriting the boosted readyAt
+  return { ...plot, readyAt: newReadyAt, doubleHarvest: doubleHarvest || (plot as any).doubleHarvest, baseGrowMs: null } as PlotState;
 }
 
 // Guarantees double harvest on a growing plot
@@ -713,10 +715,11 @@ function applyFertilizerEffect(plot: PlotState): PlotState {
   return { ...plot, doubleHarvest: true };
 }
 
-// Instantly completes a growing plot
+// Instantly completes a growing plot.
+// Clears baseGrowMs so weather recalculation can't revert the instant-ready state.
 function applyLightningEffect(plot: PlotState): PlotState {
   if (plot.status !== "growing" || !plot.readyAt) return plot;
-  return { ...plot, readyAt: new Date().toISOString(), status: "ready" as const };
+  return { ...plot, readyAt: new Date().toISOString(), status: "ready" as const, baseGrowMs: null } as PlotState;
 }
 const HARVEST_ENERGY = 1;
 const PLANT_ENERGY = 2;

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence, useDragControls } from "framer-motion";
 import { useFarm, useFarmAction } from "@/hooks/use-farm";
+import { useExpandableSheet } from "@/hooks/use-expandable-sheet";
 import { PlotState, FarmData, WorldId } from "@/lib/types";
 import { CROPS, PRODUCTS, SEASON_CONFIG } from "@/lib/constants";
 import { EmojiImg } from "@/components/ui/emoji-img";
@@ -76,8 +77,7 @@ function InventorySheet({
   const seedEntries = Object.entries(farm.seeds ?? {}).filter(([, c]) => c > 0);
   const cropEntries = Object.entries((farm.inventory ?? {}) as Record<string, number>).filter(([, c]) => c > 0);
 
-  // ── Swipe-to-close via handle (pointer-captured, no framer drag interference) ──
-  const dragControls = useDragControls();
+  const { sheetProps, handlePointerDownHandle } = useExpandableSheet(onClose);
 
   // ── Long-press for drag-to-field ─────────────────────────────────────────────
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -107,28 +107,16 @@ function InventorySheet({
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           onClick={onClose}
         />
-        {/* Sheet — drag only via handle using dragControls */}
+        {/* Sheet */}
         <motion.div
-          className="fixed bottom-0 left-0 right-0 bg-background rounded-t-3xl z-50 flex flex-col"
-          style={{
-            maxHeight: "76vh",
-            paddingBottom: "calc(var(--safe-bottom, 0px) + 12px)",
-          }}
-          initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
-          transition={{ type: "spring", stiffness: 340, damping: 34 }}
-          drag="y"
-          dragControls={dragControls}
-          dragListener={false}
-          dragConstraints={{ top: 0 }}
-          dragElastic={{ top: 0, bottom: 0.35 }}
-          onDragEnd={(_, info) => {
-            if (info.offset.y > 80 || info.velocity.y > 250) onClose();
-          }}
+          {...sheetProps}
+          className="fixed bottom-0 left-0 right-0 bg-background rounded-t-3xl z-50 flex flex-col overflow-hidden"
+          style={{ ...sheetProps.style, paddingBottom: "calc(var(--safe-bottom, 0px) + 12px)" }}
         >
-          {/* ── Drag handle — only this area initiates sheet-swipe ── */}
+          {/* Drag handle */}
           <div
             className="flex justify-center pt-3 pb-2 shrink-0 touch-none cursor-grab active:cursor-grabbing"
-            onPointerDown={(e) => { e.stopPropagation(); dragControls.start(e); }}
+            onPointerDown={handlePointerDownHandle}
           >
             <div className="w-10 h-1 rounded-full bg-gray-300" />
           </div>
@@ -261,7 +249,7 @@ function SeedShopSheet({
   onActivateItem: (item: "watering_can" | "sprinkler" | "fertilizer" | "lightning") => void;
 }) {
   const { mutate, isPending } = useFarmAction();
-  const dragControls = useDragControls();
+  const { sheetProps, handlePointerDownHandle } = useExpandableSheet(onClose);
   const [tab, setTab] = useState<"seeds" | "boosters" | "sell">("seeds");
 
   const cropSellItems = Object.entries((farm.inventory ?? {}) as Record<string, number>).filter(([, c]) => c > 0);
@@ -282,24 +270,14 @@ function SeedShopSheet({
           onClick={onClose}
         />
         <motion.div
-          className="fixed bottom-0 left-0 right-0 bg-background rounded-t-3xl z-50 flex flex-col"
-          style={{
-            maxHeight: "80vh",
-            paddingBottom: "calc(var(--safe-bottom, 0px) + 12px)",
-          }}
-          initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
-          transition={{ type: "spring", stiffness: 340, damping: 34 }}
-          drag="y"
-          dragControls={dragControls}
-          dragListener={false}
-          dragConstraints={{ top: 0 }}
-          dragElastic={{ top: 0, bottom: 0.35 }}
-          onDragEnd={(_, info) => { if (info.offset.y > 80 || info.velocity.y > 250) onClose(); }}
+          {...sheetProps}
+          className="fixed bottom-0 left-0 right-0 bg-background rounded-t-3xl z-50 flex flex-col overflow-hidden"
+          style={{ ...sheetProps.style, paddingBottom: "calc(var(--safe-bottom, 0px) + 12px)" }}
         >
           {/* Handle */}
           <div
             className="flex justify-center pt-3 pb-2 shrink-0 touch-none cursor-grab active:cursor-grabbing"
-            onPointerDown={(e) => { e.stopPropagation(); dragControls.start(e); }}
+            onPointerDown={handlePointerDownHandle}
           >
             <div className="w-10 h-1 rounded-full bg-gray-300" />
           </div>
@@ -451,7 +429,7 @@ function MapModal({ farm, onClose, onUnlock, onSwitch }: {
   onUnlock: (worldId: WorldId) => void;
   onSwitch: (worldId: WorldId) => void;
 }) {
-  const dragControls = useDragControls();
+  const { sheetProps: worldSheetProps, handlePointerDownHandle: worldHandlePointerDownHandle } = useExpandableSheet(onClose);
   const mainPlots = farm.activeWorldId === "main"
     ? (farm.plots?.length ?? 0)
     : (farm.worlds?.["main"] as { plots?: unknown[] } | undefined)?.plots?.length ?? 0;
@@ -465,16 +443,12 @@ function MapModal({ farm, onClose, onUnlock, onSwitch }: {
           onClick={onClose}
         />
         <motion.div
-          className="fixed bottom-0 left-0 right-0 bg-background rounded-t-3xl z-50 flex flex-col"
-          style={{ maxHeight: "82vh", paddingBottom: "calc(var(--safe-bottom, 0px) + 12px)" }}
-          initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
-          transition={{ type: "spring", stiffness: 340, damping: 34 }}
-          drag="y" dragControls={dragControls} dragListener={false}
-          dragConstraints={{ top: 0 }} dragElastic={{ top: 0, bottom: 0.35 }}
-          onDragEnd={(_, info) => { if (info.offset.y > 80 || info.velocity.y > 250) onClose(); }}
+          {...worldSheetProps}
+          className="fixed bottom-0 left-0 right-0 bg-background rounded-t-3xl z-50 flex flex-col overflow-hidden"
+          style={{ ...worldSheetProps.style, paddingBottom: "calc(var(--safe-bottom, 0px) + 12px)" }}
         >
           <div className="flex justify-center pt-3 pb-2 shrink-0 touch-none cursor-grab active:cursor-grabbing"
-            onPointerDown={(e) => { e.stopPropagation(); dragControls.start(e); }}>
+            onPointerDown={worldHandlePointerDownHandle}>
             <div className="w-10 h-1 rounded-full bg-gray-300" />
           </div>
           <div className="flex items-center justify-between px-5 pt-0 pb-3 shrink-0">
@@ -1161,7 +1135,7 @@ export default function FarmGame() {
   const [activeItemMode, setActiveItemMode] = useState<"watering_can" | "sprinkler" | "fertilizer" | "lightning" | null>(null);
   const rewardIdRef = useRef(0);
   const streakShownRef = useRef(false);
-  const eventShopDragControls = useDragControls();
+  const { sheetProps: eventSheetProps, handlePointerDownHandle: eventHandlePointerDown } = useExpandableSheet(() => setShowEventShop(false));
   const { showOnboarding, finishOnboarding } = useOnboarding();
 
   // ── Playtime tracking refs (must be before early returns) ─────────────────
@@ -1442,23 +1416,13 @@ export default function FarmGame() {
           >
             <div className="absolute inset-0 bg-black/40" onClick={() => setShowEventShop(false)} />
             <motion.div
-              className="relative w-full max-w-md bg-card rounded-t-2xl shadow-2xl pb-safe flex flex-col"
-              style={{ maxHeight: "80vh" }}
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", damping: 32, stiffness: 380 }}
-              drag="y"
-              dragControls={eventShopDragControls}
-              dragListener={false}
-              dragConstraints={{ top: 0 }}
-              dragElastic={{ top: 0.12, bottom: 0.4 }}
-              onDragEnd={(_, info) => { if (info.offset.y > 90 || info.velocity.y > 260) setShowEventShop(false); }}
+              {...eventSheetProps}
+              className="relative w-full max-w-md bg-card rounded-t-2xl shadow-2xl flex flex-col overflow-hidden"
             >
               {/* Drag handle */}
               <div
                 className="flex justify-center pt-3 pb-1 flex-shrink-0 touch-none cursor-grab active:cursor-grabbing"
-                onPointerDown={(e) => { e.stopPropagation(); eventShopDragControls.start(e); }}
+                onPointerDown={eventHandlePointerDown}
               >
                 <div className="w-10 h-1 rounded-full bg-white/30" />
               </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { motion, AnimatePresence, useDragControls } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { useExpandableSheet } from "@/hooks/use-expandable-sheet";
 import { UserPlus, Link2, ArrowRightLeft, Check, X, Trash2, Copy, ChevronDown, ChevronUp, Search, Clock, Trophy, Gift, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useFarmAction } from "@/hooks/use-farm";
@@ -174,26 +175,19 @@ function TradeBuilder({ farm, friend, onClose }: { farm: FarmData; friend: Frien
   const prodOptions = Object.entries(prod).filter(([, c]) => c > 0).map(([k]) => k);
   const friendNameShort = shortName(friend.profile, friend.friendId);
 
-  const tradeDragControls = useDragControls();
+  const { sheetProps: tradeSheetProps, handlePointerDownHandle: tradeHandlePointerDown } = useExpandableSheet(onClose);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-black/50" onClick={onClose}>
       <motion.div
-        initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
-        transition={{ type: "spring", damping: 28, stiffness: 280 }}
-        drag="y"
-        dragControls={tradeDragControls}
-        dragListener={false}
-        dragConstraints={{ top: 0 }}
-        dragElastic={{ top: 0.12, bottom: 0.4 }}
-        onDragEnd={(_, info) => { if (info.offset.y > 90 || info.velocity.y > 260) onClose(); }}
-        className="w-full bg-card rounded-t-3xl max-h-[85vh] flex flex-col"
+        {...tradeSheetProps}
+        className="w-full bg-card rounded-t-3xl flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drag handle */}
         <div
           className="flex justify-center pt-3 pb-1 flex-shrink-0 touch-none cursor-grab active:cursor-grabbing"
-          onPointerDown={(e) => { e.stopPropagation(); tradeDragControls.start(e); }}
+          onPointerDown={tradeHandlePointerDown}
         >
           <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
         </div>
@@ -466,7 +460,7 @@ interface GiftSliderModalProps {
 
 function GiftSliderModal({ friendId, friendName, myCoins, onConfirm, onClose, isPending }: GiftSliderModalProps) {
   const [amount, setAmount] = useState(Math.min(100, myCoins));
-  const giftDragControls = useDragControls();
+  const { sheetProps: giftSheetProps, handlePointerDownHandle: giftHandlePointerDown } = useExpandableSheet(onClose);
   const MAX = 500;
   const canAfford = myCoins >= amount;
 
@@ -482,22 +476,13 @@ function GiftSliderModal({ friendId, friendName, myCoins, onConfirm, onClose, is
       <motion.div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
       <motion.div
-        className="relative bg-background rounded-t-3xl shadow-2xl pb-8"
-        initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        exit={{ y: "100%" }}
-        transition={{ type: "spring", damping: 26, stiffness: 300 }}
-        drag="y"
-        dragControls={giftDragControls}
-        dragListener={false}
-        dragConstraints={{ top: 0 }}
-        dragElastic={{ top: 0.12, bottom: 0.4 }}
-        onDragEnd={(_, info) => { if (info.offset.y > 90 || info.velocity.y > 260) onClose(); }}
+        {...giftSheetProps}
+        className="relative bg-background rounded-t-3xl shadow-2xl flex flex-col overflow-hidden"
       >
         {/* Handle */}
         <div
-          className="flex justify-center pt-3 pb-1 touch-none cursor-grab active:cursor-grabbing"
-          onPointerDown={(e) => { e.stopPropagation(); giftDragControls.start(e); }}
+          className="flex justify-center pt-3 pb-1 touch-none cursor-grab active:cursor-grabbing flex-shrink-0"
+          onPointerDown={giftHandlePointerDown}
         >
           <div className="w-10 h-1 bg-muted-foreground/30 rounded-full" />
         </div>

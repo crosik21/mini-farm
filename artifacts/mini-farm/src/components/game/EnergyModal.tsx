@@ -1,7 +1,8 @@
-import { motion, AnimatePresence, useDragControls } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useFarmAction } from "@/hooks/use-farm";
 import { FarmData } from "@/lib/types";
 import { X, Zap } from "lucide-react";
+import { useExpandableSheet } from "@/hooks/use-expandable-sheet";
 
 const PACKS = [
   { amount: 10,  cost: 40,  label: "+10 энергии",   sub: "Восстановит 10 ед." },
@@ -17,7 +18,7 @@ interface EnergyModalProps {
 
 export function EnergyModal({ isOpen, onClose, farm }: EnergyModalProps) {
   const { mutate: performAction, isPending } = useFarmAction();
-  const dragControls = useDragControls();
+  const { sheetProps, handlePointerDownHandle } = useExpandableSheet(onClose);
   const handleBuy = (amount: number) => performAction({ action: "buy_energy", amount }, { onSuccess: onClose });
   const missingEnergy = farm.maxEnergy - farm.energy;
 
@@ -31,29 +32,18 @@ export function EnergyModal({ isOpen, onClose, farm }: EnergyModalProps) {
             onClick={onClose}
           />
           <motion.div
-            initial={{ opacity: 0, y: "100%" }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: "100%" }}
-            transition={{ type: "spring", damping: 25, stiffness: 220 }}
-            drag="y"
-            dragControls={dragControls}
-            dragListener={false}
-            dragConstraints={{ top: 0 }}
-            dragElastic={{ top: 0.12, bottom: 0.4 }}
-            onDragEnd={(_, info) => {
-              if (info.offset.y > 90 || info.velocity.y > 260) onClose();
-            }}
-            className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t-2 border-border rounded-t-3xl"
+            {...sheetProps}
+            className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t-2 border-border rounded-t-3xl overflow-hidden flex flex-col"
           >
             {/* Drag handle */}
             <div
-              className="flex justify-center pt-3 pb-1 touch-none cursor-grab active:cursor-grabbing"
-              onPointerDown={(e) => { e.stopPropagation(); dragControls.start(e); }}
+              className="flex justify-center pt-3 pb-1 touch-none cursor-grab active:cursor-grabbing flex-shrink-0"
+              onPointerDown={handlePointerDownHandle}
             >
               <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
             </div>
 
-            <div className="px-5 pt-3 pb-10">
+            <div className="flex-1 overflow-y-auto px-5 pt-3 pb-10" style={{ touchAction: "pan-y" }}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="font-bold text-xl flex items-center gap-2 text-foreground">
                   <Zap className="text-yellow-500" size={22} /> Пополнить энергию

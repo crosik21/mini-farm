@@ -1,6 +1,7 @@
 import * as React from "react"
-import { motion, AnimatePresence, useDragControls } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import { X } from "lucide-react"
+import { useExpandableSheet } from "@/hooks/use-expandable-sheet"
 
 interface DrawerModalProps {
   isOpen: boolean
@@ -8,11 +9,10 @@ interface DrawerModalProps {
   title: string
   children: React.ReactNode
   icon?: React.ReactNode
-  maxHeight?: string
 }
 
-export function DrawerModal({ isOpen, onClose, title, children, icon, maxHeight = "85vh" }: DrawerModalProps) {
-  const dragControls = useDragControls()
+export function DrawerModal({ isOpen, onClose, title, children, icon }: DrawerModalProps) {
+  const { sheetProps, handlePointerDownHandle } = useExpandableSheet(onClose)
 
   return (
     <AnimatePresence>
@@ -27,27 +27,15 @@ export function DrawerModal({ isOpen, onClose, title, children, icon, maxHeight 
             className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
           />
 
-          {/* Sheet */}
+          {/* Sheet — full height, default translateY(15%) shows 85vh */}
           <motion.div
-            initial={{ y: "100%" }}
-            animate={{ y: 0 }}
-            exit={{ y: "100%" }}
-            transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            drag="y"
-            dragControls={dragControls}
-            dragListener={false}
-            dragConstraints={{ top: 0 }}
-            dragElastic={{ top: 0.12, bottom: 0.4 }}
-            onDragEnd={(_, info) => {
-              if (info.offset.y > 90 || info.velocity.y > 260) onClose()
-            }}
-            className="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[2rem] bg-card border-t-4 border-card-border shadow-2xl"
-            style={{ maxHeight }}
+            {...sheetProps}
+            className="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-[2rem] bg-card border-t-4 border-card-border shadow-2xl overflow-hidden"
           >
-            {/* Drag handle — only this initiates the sheet-swipe gesture */}
+            {/* Drag handle */}
             <div
               className="flex justify-center pt-3 pb-1 flex-shrink-0 touch-none cursor-grab active:cursor-grabbing"
-              onPointerDown={(e) => { e.stopPropagation(); dragControls.start(e) }}
+              onPointerDown={handlePointerDownHandle}
             >
               <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
             </div>

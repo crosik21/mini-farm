@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { motion, AnimatePresence, useDragControls } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { useExpandableSheet } from "@/hooks/use-expandable-sheet";
 import { FarmData, MarketListing } from "@/lib/types";
 import { ITEM_NAMES, ITEM_EMOJIS, FISH_META } from "@/lib/constants";
 import { getTelegramId } from "@/lib/telegram";
@@ -123,7 +124,7 @@ function CreateListingModal({
 }) {
   const { toast } = useToast();
   const telegramId = getTelegramId();
-  const listingDragControls = useDragControls();
+  const { sheetProps: listingSheetProps, handlePointerDownHandle: listingHandlePointerDown } = useExpandableSheet(onClose);
   const [itemType, setItemType] = useState<"crop" | "product" | "fish">("crop");
   const [itemId, setItemId] = useState("");
   const [qty, setQty] = useState(1);
@@ -169,21 +170,14 @@ function CreateListingModal({
       onClick={onClose}
     >
       <motion.div
-        initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
-        transition={{ type: "spring", stiffness: 400, damping: 40 }}
-        drag="y"
-        dragControls={listingDragControls}
-        dragListener={false}
-        dragConstraints={{ top: 0 }}
-        dragElastic={{ top: 0.12, bottom: 0.4 }}
-        onDragEnd={(_, info) => { if (info.offset.y > 90 || info.velocity.y > 260) onClose(); }}
-        className="w-full bg-background rounded-t-3xl max-h-[85vh] flex flex-col"
+        {...listingSheetProps}
+        className="w-full bg-background rounded-t-3xl flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drag handle */}
         <div
           className="flex justify-center pt-3 pb-1 flex-shrink-0 touch-none cursor-grab active:cursor-grabbing"
-          onPointerDown={(e) => { e.stopPropagation(); listingDragControls.start(e); }}
+          onPointerDown={listingHandlePointerDown}
         >
           <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
         </div>

@@ -87,7 +87,7 @@ export function TopBar({ farm, onEnergyClick }: TopBarProps) {
         <motion.div key={farm.coins} initial={{ scale: 1.12 }} animate={{ scale: 1 }}
           className="flex items-center gap-0.5 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
           <span className="text-xs">🪙</span>
-          <span className="font-bold text-amber-700 text-xs">{farm.coins.toLocaleString()}</span>
+          <span className="font-bold text-amber-700 text-xs">{(farm.coins ?? 0).toLocaleString()}</span>
         </motion.div>
 
         <motion.div key={farm.gems} initial={{ scale: 1.12 }} animate={{ scale: 1 }}

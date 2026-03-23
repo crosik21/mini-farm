@@ -1327,7 +1327,7 @@ export default function FarmGame() {
           )}
 
           {activeTab === "pass" && (
-            <motion.div key="pass" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }} className="flex flex-col flex-1 min-h-full">
+            <motion.div key="pass" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
               <FarmPassTab farm={farm} />
             </motion.div>
           )}

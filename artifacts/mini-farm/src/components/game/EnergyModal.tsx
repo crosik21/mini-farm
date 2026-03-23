@@ -97,7 +97,7 @@ export function EnergyModal({ isOpen, onClose, farm }: EnergyModalProps) {
             </div>
 
             <p className="text-center text-xs text-muted-foreground mt-4">
-              Энергия восстанавливается автоматически: +1 каждые 5 минут
+              Энергия восстанавливается автоматически: +3 каждые 2 минуты
             </p>
           </motion.div>
         </>

@@ -78,6 +78,17 @@ export function QuestsTab({ farm }: QuestsTabProps) {
         )}
       </div>
 
+      {claimable >= 2 && (
+        <button
+          onClick={() => mutate({ action: "claim_all_quests" })}
+          disabled={isPending}
+          className="w-full mb-4 py-2.5 font-bold text-sm bg-green-500 text-white rounded-2xl border-b-4 border-green-700 active:translate-y-0.5 active:border-b-2 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+        >
+          <Gift className="w-4 h-4" />
+          Забрать всё ({claimable} награды)
+        </button>
+      )}
+
       {daily.length > 0 && (
         <div className="mb-5">
           <h3 className="font-bold text-sm text-muted-foreground uppercase tracking-wider mb-2">📅 Ежедневные</h3>

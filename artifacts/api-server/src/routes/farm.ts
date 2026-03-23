@@ -1851,6 +1851,18 @@ router.post("/:telegramId/action", async (req, res) => {
       quests[qIdx] = { ...quest, claimed: true };
       await updateAchievementProgress(telegramId, "claim_quest", 1);
 
+    // ── CLAIM ALL QUESTS ────────────────────────────────────────────────────────
+    } else if (action === "claim_all_quests") {
+      const claimable = quests.filter((q) => q.completed && !q.claimed);
+      if (claimable.length === 0) return res.status(400).json({ error: "Нет доступных наград" });
+      for (const quest of claimable) {
+        coins += quest.rewardCoins;
+        xp += quest.rewardXp;
+        if (quest.rewardGems) gems += quest.rewardGems;
+      }
+      quests = quests.map((q) => (q.completed && !q.claimed ? { ...q, claimed: true } : q));
+      await updateAchievementProgress(telegramId, "claim_quest", claimable.length);
+
     // ── REFRESH ORDERS ─────────────────────────────────────────────────────────
     } else if (action === "refresh_orders") {
       const todayKey = new Date().toISOString().slice(0, 10);

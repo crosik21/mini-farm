@@ -72,6 +72,9 @@ export function useFarmAction() {
       } else if (variables.action === "claim_quest") {
         hapticFeedback("success");
         toast({ title: "Награда получена! ⭐" });
+      } else if (variables.action === "claim_all_quests") {
+        hapticFeedback("success");
+        toast({ title: "Все награды получены! 🎁", description: "Монеты и XP зачислены." });
       } else if (variables.action === "buy_animal") {
         toast({ title: "Новое животное! 🐾", description: "Скорее покорми его!" });
       } else if (variables.action === "build_building") {

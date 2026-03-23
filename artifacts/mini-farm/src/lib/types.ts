@@ -380,6 +380,7 @@ export type FarmAction =
   | { action: "redeem_promo"; promoCode: string }
   | { action: "complete_npc_order"; orderId: string }
   | { action: "claim_quest"; questId: string }
+  | { action: "claim_all_quests" }
   | { action: "refresh_orders"; useGems?: boolean }
   | { action: "buy_energy"; amount: number }
   | { action: "expand_plots" }

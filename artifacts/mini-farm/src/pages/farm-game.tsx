@@ -305,8 +305,13 @@ function SeedShopSheet({
           </div>
           {/* Header */}
           <div className="flex items-center justify-between px-5 pb-3 shrink-0">
-            <h2 className="font-black text-lg">🛒 Магазин</h2>
-            <div className="text-sm font-bold text-amber-600">🪙 {(farm.coins ?? 0).toLocaleString()} · 💎 {farm.gems ?? 0}</div>
+            <div>
+              <h2 className="font-black text-lg leading-tight">🛒 Магазин</h2>
+              <div className="text-xs font-bold text-amber-600">🪙 {(farm.coins ?? 0).toLocaleString()} · 💎 {farm.gems ?? 0}</div>
+            </div>
+            <button onClick={onClose} className="p-1.5 rounded-full bg-muted text-muted-foreground">
+              ✕
+            </button>
           </div>
           {/* Sub-tabs */}
           <div className="flex gap-1.5 mx-5 mb-3 bg-muted rounded-2xl p-1 shrink-0">
@@ -1127,6 +1132,7 @@ export default function FarmGame() {
   const [activeItemMode, setActiveItemMode] = useState<"watering_can" | "sprinkler" | "fertilizer" | "lightning" | null>(null);
   const rewardIdRef = useRef(0);
   const streakShownRef = useRef(false);
+  const eventShopDragControls = useDragControls();
   const { showOnboarding, finishOnboarding } = useOnboarding();
 
   // ── Playtime tracking refs (must be before early returns) ─────────────────
@@ -1407,14 +1413,28 @@ export default function FarmGame() {
           >
             <div className="absolute inset-0 bg-black/40" onClick={() => setShowEventShop(false)} />
             <motion.div
-              className="relative w-full max-w-md bg-card rounded-t-2xl shadow-2xl pb-safe overflow-hidden"
+              className="relative w-full max-w-md bg-card rounded-t-2xl shadow-2xl pb-safe flex flex-col"
+              style={{ maxHeight: "80vh" }}
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 32, stiffness: 380 }}
+              drag="y"
+              dragControls={eventShopDragControls}
+              dragListener={false}
+              dragConstraints={{ top: 0 }}
+              dragElastic={{ top: 0.12, bottom: 0.4 }}
+              onDragEnd={(_, info) => { if (info.offset.y > 90 || info.velocity.y > 260) setShowEventShop(false); }}
             >
+              {/* Drag handle */}
+              <div
+                className="flex justify-center pt-3 pb-1 flex-shrink-0 touch-none cursor-grab active:cursor-grabbing"
+                onPointerDown={(e) => { e.stopPropagation(); eventShopDragControls.start(e); }}
+              >
+                <div className="w-10 h-1 rounded-full bg-white/30" />
+              </div>
               {/* Header */}
-              <div className="bg-gradient-to-r from-purple-500 to-pink-500 px-4 py-3 flex items-center gap-2">
+              <div className="bg-gradient-to-r from-purple-500 to-pink-500 px-4 py-3 flex items-center gap-2 flex-shrink-0">
                 <span className="text-2xl">{farm.activeEvent.emoji}</span>
                 <div className="flex-1">
                   <div className="font-black text-white text-sm">{farm.activeEvent.name}</div>
@@ -1423,12 +1443,14 @@ export default function FarmGame() {
                 <button onClick={() => setShowEventShop(false)} className="text-white/80 text-xl leading-none font-bold">✕</button>
               </div>
               {/* Balance */}
-              <div className="px-4 py-2 bg-purple-50 border-b border-purple-100 flex items-center gap-2">
+              <div className="px-4 py-2 bg-purple-50 border-b border-purple-100 flex items-center gap-2 flex-shrink-0">
                 <span className="text-lg">{farm.activeEvent.eventCoinEmoji}</span>
                 <span className="font-black text-purple-700">{farm.eventCoins}</span>
                 <span className="text-xs text-purple-500 ml-1">ивент-монет</span>
                 <span className="ml-auto text-[10px] text-gray-400">{Math.ceil(farm.activeEvent.msLeft / 60000)} мин. осталось</span>
               </div>
+              {/* Scrollable content */}
+              <div className="flex-1 overflow-y-auto" style={{ touchAction: "pan-y" }}>
               {/* Event crops */}
               {farm.activeEvent.eventCrops.length > 0 && (
                 <div className="px-4 pt-3">
@@ -1478,6 +1500,7 @@ export default function FarmGame() {
                   </div>
                 </div>
               )}
+              </div>{/* end scrollable content */}
             </motion.div>
           </motion.div>
         )}

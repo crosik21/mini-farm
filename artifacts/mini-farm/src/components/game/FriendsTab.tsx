@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useDragControls } from "framer-motion";
 import { UserPlus, Link2, ArrowRightLeft, Check, X, Trash2, Copy, ChevronDown, ChevronUp, Search, Clock, Trophy, Gift, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useFarmAction } from "@/hooks/use-farm";
@@ -174,17 +174,34 @@ function TradeBuilder({ farm, friend, onClose }: { farm: FarmData; friend: Frien
   const prodOptions = Object.entries(prod).filter(([, c]) => c > 0).map(([k]) => k);
   const friendNameShort = shortName(friend.profile, friend.friendId);
 
+  const tradeDragControls = useDragControls();
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/50">
+    <div className="fixed inset-0 z-50 flex items-end bg-black/50" onClick={onClose}>
       <motion.div
         initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
         transition={{ type: "spring", damping: 28, stiffness: 280 }}
-        className="w-full bg-card rounded-t-3xl p-5 max-h-[85vh] overflow-y-auto"
+        drag="y"
+        dragControls={tradeDragControls}
+        dragListener={false}
+        dragConstraints={{ top: 0 }}
+        dragElastic={{ top: 0.12, bottom: 0.4 }}
+        onDragEnd={(_, info) => { if (info.offset.y > 90 || info.velocity.y > 260) onClose(); }}
+        className="w-full bg-card rounded-t-3xl max-h-[85vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-4">
+        {/* Drag handle */}
+        <div
+          className="flex justify-center pt-3 pb-1 flex-shrink-0 touch-none cursor-grab active:cursor-grabbing"
+          onPointerDown={(e) => { e.stopPropagation(); tradeDragControls.start(e); }}
+        >
+          <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
+        </div>
+        <div className="flex items-center justify-between px-5 pb-3 flex-shrink-0">
           <h2 className="text-lg font-black text-foreground">🤝 Предложение обмена</h2>
           <button onClick={onClose} className="p-1 rounded-full bg-muted"><X size={18} className="text-muted-foreground" /></button>
         </div>
+        <div className="flex-1 overflow-y-auto px-5 pb-5" style={{ touchAction: "pan-y" }}>
 
         <div className="flex items-center gap-3 bg-muted/40 rounded-2xl p-3 mb-4">
           <Avatar telegramId={friend.friendId} size={40} />
@@ -274,6 +291,7 @@ function TradeBuilder({ farm, friend, onClose }: { farm: FarmData; friend: Frien
         >
           {createMutation.isPending ? "Отправка…" : "Отправить предложение"}
         </button>
+        </div>{/* end scroll wrapper */}
       </motion.div>
     </div>
   );
@@ -448,6 +466,7 @@ interface GiftSliderModalProps {
 
 function GiftSliderModal({ friendId, friendName, myCoins, onConfirm, onClose, isPending }: GiftSliderModalProps) {
   const [amount, setAmount] = useState(Math.min(100, myCoins));
+  const giftDragControls = useDragControls();
   const MAX = 500;
   const canAfford = myCoins >= amount;
 
@@ -463,25 +482,40 @@ function GiftSliderModal({ friendId, friendName, myCoins, onConfirm, onClose, is
       <motion.div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
       <motion.div
-        className="relative bg-background rounded-t-3xl shadow-2xl px-5 pb-8 pt-4"
+        className="relative bg-background rounded-t-3xl shadow-2xl pb-8"
         initial={{ y: "100%" }}
         animate={{ y: 0 }}
         exit={{ y: "100%" }}
         transition={{ type: "spring", damping: 26, stiffness: 300 }}
+        drag="y"
+        dragControls={giftDragControls}
+        dragListener={false}
+        dragConstraints={{ top: 0 }}
+        dragElastic={{ top: 0.12, bottom: 0.4 }}
+        onDragEnd={(_, info) => { if (info.offset.y > 90 || info.velocity.y > 260) onClose(); }}
       >
         {/* Handle */}
-        <div className="flex justify-center mb-4">
+        <div
+          className="flex justify-center pt-3 pb-1 touch-none cursor-grab active:cursor-grabbing"
+          onPointerDown={(e) => { e.stopPropagation(); giftDragControls.start(e); }}
+        >
           <div className="w-10 h-1 bg-muted-foreground/30 rounded-full" />
         </div>
 
         {/* Header */}
-        <div className="flex items-center gap-3 mb-5">
-          <Avatar telegramId={friendId} size={44} />
-          <div>
-            <p className="font-bold text-foreground text-base">{friendName}</p>
-            <p className="text-xs text-muted-foreground">Ежедневный подарок</p>
+        <div className="flex items-center justify-between px-5 pt-3 mb-5">
+          <div className="flex items-center gap-3">
+            <Avatar telegramId={friendId} size={44} />
+            <div>
+              <p className="font-bold text-foreground text-base">{friendName}</p>
+              <p className="text-xs text-muted-foreground">Ежедневный подарок</p>
+            </div>
           </div>
+          <button onClick={onClose} className="p-1.5 rounded-full bg-muted">
+            <X size={18} className="text-muted-foreground" />
+          </button>
         </div>
+        <div className="px-5">
 
         {/* Amount display */}
         <div className="flex flex-col items-center mb-6">
@@ -551,6 +585,7 @@ function GiftSliderModal({ friendId, friendName, myCoins, onConfirm, onClose, is
             {!canAfford ? "Недостаточно монет" : isPending ? "Отправка…" : `Подарить ${amount} 🪙`}
           </button>
         </div>
+        </div>{/* end px-5 */}
       </motion.div>
     </motion.div>
   );

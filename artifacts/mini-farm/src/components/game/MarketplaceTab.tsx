@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useDragControls } from "framer-motion";
 import { FarmData, MarketListing } from "@/lib/types";
 import { ITEM_NAMES, ITEM_EMOJIS, FISH_META } from "@/lib/constants";
 import { getTelegramId } from "@/lib/telegram";
@@ -123,6 +123,7 @@ function CreateListingModal({
 }) {
   const { toast } = useToast();
   const telegramId = getTelegramId();
+  const listingDragControls = useDragControls();
   const [itemType, setItemType] = useState<"crop" | "product" | "fish">("crop");
   const [itemId, setItemId] = useState("");
   const [qty, setQty] = useState(1);
@@ -170,13 +171,27 @@ function CreateListingModal({
       <motion.div
         initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
         transition={{ type: "spring", stiffness: 400, damping: 40 }}
-        className="w-full bg-background rounded-t-3xl p-5 max-h-[85vh] overflow-y-auto"
+        drag="y"
+        dragControls={listingDragControls}
+        dragListener={false}
+        dragConstraints={{ top: 0 }}
+        dragElastic={{ top: 0.12, bottom: 0.4 }}
+        onDragEnd={(_, info) => { if (info.offset.y > 90 || info.velocity.y > 260) onClose(); }}
+        className="w-full bg-background rounded-t-3xl max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-lg">Разместить лот</h3>
-          <button onClick={onClose}><X size={20} /></button>
+        {/* Drag handle */}
+        <div
+          className="flex justify-center pt-3 pb-1 flex-shrink-0 touch-none cursor-grab active:cursor-grabbing"
+          onPointerDown={(e) => { e.stopPropagation(); listingDragControls.start(e); }}
+        >
+          <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
         </div>
+        <div className="flex items-center justify-between px-5 pb-3 flex-shrink-0">
+          <h3 className="font-bold text-lg">Разместить лот</h3>
+          <button onClick={onClose} className="p-1.5 rounded-full bg-muted"><X size={18} className="text-muted-foreground" /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 pb-5" style={{ touchAction: "pan-y" }}>
 
         {/* Item type tabs */}
         <div className="flex gap-1 bg-muted rounded-xl p-1 mb-4">
@@ -253,6 +268,7 @@ function CreateListingModal({
             </button>
           </>
         )}
+        </div>{/* end scroll wrapper */}
       </motion.div>
     </motion.div>
   );

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useDragControls } from "framer-motion";
 import { useFarmAction } from "@/hooks/use-farm";
 import { FarmData, FarmPass, PassLevelReward, PassReward } from "@/lib/types";
 import { Lock, Star, CheckCircle } from "lucide-react";
@@ -124,6 +124,7 @@ function LevelMarker({ level, passLevel, maxLevel }: { level: number; passLevel:
 export function FarmPassTab({ farm }: FarmPassTabProps) {
   const { mutate: performAction, isPending } = useFarmAction();
   const [showBuyConfirm, setShowBuyConfirm] = useState(false);
+  const buyConfirmDragControls = useDragControls();
 
   const pass: FarmPass | null = farm.farmPass ?? null;
   const passLevel = pass?.level ?? 1;
@@ -299,9 +300,23 @@ export function FarmPassTab({ farm }: FarmPassTabProps) {
             <motion.div
               initial={{ y: 120 }} animate={{ y: 0 }} exit={{ y: 120 }}
               transition={{ type: "spring", stiffness: 400, damping: 38 }}
-              className="bg-card border border-border rounded-3xl p-6 w-full max-w-sm max-h-[85vh] overflow-y-auto"
+              className="bg-card border border-border rounded-3xl w-full max-w-sm max-h-[85vh] flex flex-col"
               onClick={(e) => e.stopPropagation()}
+              drag="y"
+              dragControls={buyConfirmDragControls}
+              dragListener={false}
+              dragConstraints={{ top: 0 }}
+              dragElastic={{ top: 0.12, bottom: 0.4 }}
+              onDragEnd={(_, info) => { if (info.offset.y > 90 || info.velocity.y > 260) setShowBuyConfirm(false); }}
             >
+              {/* Drag handle */}
+              <div
+                className="flex justify-center pt-3 pb-1 flex-shrink-0 touch-none cursor-grab active:cursor-grabbing"
+                onPointerDown={(e) => { e.stopPropagation(); buyConfirmDragControls.start(e); }}
+              >
+                <div className="w-10 h-1 rounded-full bg-gray-300" />
+              </div>
+              <div className="flex-1 overflow-y-auto p-6" style={{ touchAction: "pan-y" }}>
               <div className="text-center mb-4">
                 <div className="text-4xl mb-2">🏆</div>
                 <h3 className="font-black text-xl text-foreground">Фарм-Пасс Премиум</h3>
@@ -334,6 +349,7 @@ export function FarmPassTab({ farm }: FarmPassTabProps) {
                   {farm.gems >= 99 ? "Купить 💎99" : "Мало кристаллов"}
                 </motion.button>
               </div>
+              </div>{/* end scrollable */}
             </motion.div>
           </motion.div>
         )}

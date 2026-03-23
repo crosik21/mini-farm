@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useDragControls } from "framer-motion";
 import { X, Star, Wheat, Cat, Factory, Trophy, Globe, Package, Gem, ArrowRightLeft, Gift } from "lucide-react";
 import { EmojiImg } from "@/components/ui/emoji-img";
 import { getLevelProgress } from "@/lib/constants";
@@ -87,6 +87,7 @@ interface Props {
 }
 
 export function FriendProfileModal({ telegramId, onClose, onTrade, onGift, isFriendAccepted }: Props) {
+  const dragControls = useDragControls();
   const { data: profile, isLoading, error } = useQuery<PublicProfile>({
     queryKey: ["friend-profile", telegramId],
     queryFn: () => fetchProfile(telegramId),
@@ -141,9 +142,20 @@ export function FriendProfileModal({ telegramId, onClose, onTrade, onGift, isFri
         animate={{ y: 0 }}
         exit={{ y: "100%" }}
         transition={{ type: "spring", damping: 28, stiffness: 320 }}
+        drag="y"
+        dragControls={dragControls}
+        dragListener={false}
+        dragConstraints={{ top: 0 }}
+        dragElastic={{ top: 0.12, bottom: 0.4 }}
+        onDragEnd={(_, info) => {
+          if (info.offset.y > 90 || info.velocity.y > 260) onClose();
+        }}
       >
-        {/* Handle */}
-        <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+        {/* Handle — triggers drag */}
+        <div
+          className="flex justify-center pt-3 pb-1 flex-shrink-0 touch-none cursor-grab active:cursor-grabbing"
+          onPointerDown={(e) => { e.stopPropagation(); dragControls.start(e); }}
+        >
           <div className="w-10 h-1 bg-muted-foreground/30 rounded-full" />
         </div>
 

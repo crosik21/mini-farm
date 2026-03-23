@@ -1269,7 +1269,7 @@ export default function FarmGame() {
               <FarmSectionNav active={farmSection} onChange={setFarmSection} farm={farm} />
               <AnimatePresence mode="wait">
                 {farmSection === "field" && (
-                  <motion.div key="field" className="flex flex-col" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }} transition={{ duration: 0.18 }}>
+                  <motion.div key="field" className="flex flex-col flex-1" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }} transition={{ duration: 0.18 }}>
                     <FieldView farm={farm} onPlotTap={handlePlotTap} onExpandPlots={handleExpandPlots} isExpanding={isPending}
                       floatingRewards={floatingRewards} onRewardDone={handleRewardDone}
                       activeItemMode={activeItemMode} onCancelItemMode={() => setActiveItemMode(null)}

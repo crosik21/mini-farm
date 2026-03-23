@@ -25,7 +25,7 @@ const LEVEL_TITLES: Record<number, string> = {
 
 function TelegramAvatar({ telegramId, size = 96 }: { telegramId: string; size?: number }) {
   const [error, setError] = useState(false);
-  const isDemo = telegramId.startsWith("demo_") || !/^\d+$/.test(telegramId);
+  const isDemo = !telegramId || telegramId.startsWith("demo_") || !/^\d+$/.test(telegramId);
   if (isDemo || error) {
     return (
       <div
@@ -85,7 +85,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 export function ProfileTab({ farm }: { farm: FarmData }) {
   const { toast } = useToast();
-  const { progress, current, needed } = getLevelProgress(farm.xp, farm.level);
+  const { progress, current, needed } = getLevelProgress(farm.xp ?? 0, farm.level ?? 1);
   const season = SEASON_CONFIG[farm.season] || SEASON_CONFIG.spring;
 
   const [showSeeds, setShowSeeds] = useState(false);
@@ -153,7 +153,7 @@ export function ProfileTab({ farm }: { farm: FarmData }) {
     { icon: <Package size={17} />, label: "Продуктов", value: totalProducts,                  color: "text-blue-500" },
     { icon: <Zap size={17} />,     label: "Энергия",   value: `${farm.energy}/${farm.maxEnergy}`, color: "text-sky-500" },
     { icon: <Gem size={17} />,     label: "Кристаллы", value: farm.gems,                      color: "text-purple-500" },
-    { icon: <Star size={17} />,    label: "Очки опыта",value: farm.xp.toLocaleString(),       color: "text-orange-400" },
+    { icon: <Star size={17} />,    label: "Очки опыта",value: (farm.xp ?? 0).toLocaleString(), color: "text-orange-400" },
     { icon: <Clock size={17} />,   label: "В игре",    value: playtimeLabel,                  color: "text-teal-500" },
   ];
 
@@ -221,7 +221,7 @@ export function ProfileTab({ farm }: { farm: FarmData }) {
         <div className="flex items-center gap-3 mt-3">
           <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 dark:bg-amber-950 dark:border-amber-800 rounded-full px-3.5 py-1.5">
             <span className="text-base">🪙</span>
-            <span className="font-black text-amber-700 dark:text-amber-400 text-sm">{farm.coins.toLocaleString()}</span>
+            <span className="font-black text-amber-700 dark:text-amber-400 text-sm">{(farm.coins ?? 0).toLocaleString()}</span>
           </div>
           <div className="flex items-center gap-1.5 bg-purple-50 border border-purple-200 dark:bg-purple-950 dark:border-purple-800 rounded-full px-3.5 py-1.5">
             <Gem className="w-3.5 h-3.5 text-purple-500" />

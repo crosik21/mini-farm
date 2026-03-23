@@ -490,7 +490,7 @@ function GiftSliderModal({ friendId, friendName, myCoins, onConfirm, onClose, is
             <span className="font-black text-3xl text-amber-700 dark:text-amber-400 tabular-nums">{amount}</span>
           </div>
           <p className="text-xs text-muted-foreground">
-            У вас: <span className="font-bold text-foreground">{myCoins.toLocaleString()} 🪙</span>
+            У вас: <span className="font-bold text-foreground">{(myCoins ?? 0).toLocaleString()} 🪙</span>
           </p>
         </div>
 

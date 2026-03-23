@@ -306,7 +306,7 @@ function SeedShopSheet({
           {/* Header */}
           <div className="flex items-center justify-between px-5 pb-3 shrink-0">
             <h2 className="font-black text-lg">🛒 Магазин</h2>
-            <div className="text-sm font-bold text-amber-600">🪙 {farm.coins.toLocaleString()} · 💎 {farm.gems}</div>
+            <div className="text-sm font-bold text-amber-600">🪙 {(farm.coins ?? 0).toLocaleString()} · 💎 {farm.gems ?? 0}</div>
           </div>
           {/* Sub-tabs */}
           <div className="flex gap-1.5 mx-5 mb-3 bg-muted rounded-2xl p-1 shrink-0">

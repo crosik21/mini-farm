@@ -25,7 +25,7 @@ export function ShopModal({ isOpen, onClose, farm }: ShopModalProps) {
     <DrawerModal isOpen={isOpen} onClose={onClose} title="Магазин семян" icon={<Store className="text-secondary" />}>
       <div className="mb-4 flex items-center justify-between bg-amber-50 border border-amber-200 p-3 rounded-xl">
         <span className="font-bold text-amber-800">Баланс:</span>
-        <span className="font-display font-bold text-amber-600 text-lg">🪙 {farm.coins.toLocaleString()}</span>
+        <span className="font-display font-bold text-amber-600 text-lg">🪙 {(farm.coins ?? 0).toLocaleString()}</span>
       </div>
 
       <div className="flex flex-col gap-3 pb-8">

@@ -16,7 +16,7 @@ const WEATHER_CHIP_STYLE: Record<string, string> = {
 };
 
 export function TopBar({ farm, onEnergyClick }: TopBarProps) {
-  const { progress, current, needed } = getLevelProgress(farm.xp, farm.level);
+  const { progress, current, needed } = getLevelProgress(farm.xp ?? 0, farm.level ?? 1);
   const season = SEASON_CONFIG[farm.season] || SEASON_CONFIG.spring;
   const energyPct = Math.min(100, (farm.energy / farm.maxEnergy) * 100);
   const energyLow = farm.energy < 5;

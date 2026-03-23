@@ -1282,6 +1282,13 @@ router.post("/:telegramId/action", async (req, res) => {
     const activePetType = currentPets.owned.find((p) => p.active)?.type ?? null;
     let unlockedSkills: string[] = (farm.unlockedSkills as string[] | null) ?? [];
     let skillPoints: number = (farm.skillPoints as number) ?? 0;
+    const todayKey = new Date().toISOString().slice(0, 10);
+    let npcRefreshesLeft: number = (() => {
+      const storedDate = (farm.npcRefreshesDate as string) ?? "";
+      if (storedDate !== todayKey) return 3;
+      return (farm.npcRefreshesLeft as number) ?? 3;
+    })();
+    let npcRefreshesDate: string = (farm.npcRefreshesDate as string) ?? "";
 
     // Grow speed multiplier (< 1 = faster)
     let growSpeedMult = 1.0;
@@ -1865,12 +1872,6 @@ router.post("/:telegramId/action", async (req, res) => {
 
     // ── REFRESH ORDERS ─────────────────────────────────────────────────────────
     } else if (action === "refresh_orders") {
-      const todayKey = new Date().toISOString().slice(0, 10);
-      let npcRefreshesLeft: number = (farm.npcRefreshesLeft as number) ?? 3;
-      const npcRefreshesDate: string = (farm.npcRefreshesDate as string) ?? "";
-      // reset daily counter if date changed
-      if (npcRefreshesDate !== todayKey) npcRefreshesLeft = 3;
-
       const { useGems } = req.body;
       const NPC_REFRESH_GEM_COST = 5;
 
@@ -1881,10 +1882,8 @@ router.post("/:telegramId/action", async (req, res) => {
       } else {
         npcRefreshesLeft -= 1;
       }
+      npcRefreshesDate = todayKey;
       npcOrders = generateNpcOrders(getLevelFromXp(xp));
-      await db.update(farmStateTable).set({ npcRefreshesLeft, npcRefreshesDate: todayKey }).where(eq(farmStateTable.telegramId, telegramId));
-      const npcRefreshLevel = getLevelFromXp(xp);
-      return res.json({ ...serializeFarm({ ...farm, plots, coins, gems, xp, level: npcRefreshLevel, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, npcRefreshesLeft, npcRefreshesDate: todayKey }, telegramId), farmPass: serializeFarmPass(farmPassUS), achievements: buildAchievementsResponse(playerAchsUS) });
 
     // ── BUY ENERGY ─────────────────────────────────────────────────────────────
     } else if (action === "buy_energy") {
@@ -2487,6 +2486,8 @@ router.post("/:telegramId/action", async (req, res) => {
       pets: currentPets,
       skillPoints,
       unlockedSkills,
+      npcRefreshesLeft,
+      npcRefreshesDate,
       weatherType: currentWeather,
       weatherUpdatedAt: new Date(),
       updatedAt: new Date(),
@@ -2500,7 +2501,7 @@ router.post("/:telegramId/action", async (req, res) => {
 
     const playerAchs = await getPlayerAchievements(telegramId);
     const farmPass = await getOrCreateFarmPass(telegramId);
-    const updatedFarmForMedals = { ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, eventCoins, toolTiers, pets: currentPets, skillPoints, unlockedSkills };
+    const updatedFarmForMedals = { ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, eventCoins, toolTiers, pets: currentPets, skillPoints, unlockedSkills, npcRefreshesLeft, npcRefreshesDate };
     const updatedMedals = await checkAndAwardMedals(telegramId, updatedFarmForMedals);
     res.json({ ...serializeFarm({ ...updatedFarmForMedals, medals: updatedMedals }, telegramId), farmPass: serializeFarmPass(farmPass), achievements: buildAchievementsResponse(playerAchs) });
   } catch (err) {

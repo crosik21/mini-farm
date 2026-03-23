@@ -207,10 +207,10 @@ function InventorySheet({
               </p>
               <div className="flex flex-col gap-2">
                 {[
-                  { key: "watering_can" as const, emoji: "🪣", name: "Лейка", desc: "Ускоряет рост · шанс двойного урожая", count: farm.items.wateringCans ?? 0, color: "blue" },
-                  { key: "sprinkler"    as const, emoji: "💦", name: "Спринклер", desc: "Поливает несколько клеток сразу",        count: farm.items.sprinklers ?? 0,   color: "cyan" },
-                  { key: "fertilizer"  as const, emoji: "🌱", name: "Удобрение", desc: "100% двойной урожай с грядки",          count: farm.items.fertilizers ?? 0,  color: "green" },
-                  { key: "lightning"   as const, emoji: "⚡", name: "Молния",    desc: "Мгновенное созревание грядки",           count: farm.items.lightnings ?? 0,   color: "yellow" },
+                  { key: "watering_can" as const, emoji: "🪣", name: "Лейка", desc: "Ускоряет рост · шанс двойного урожая", count: farm.items?.wateringCans ?? 0, color: "blue" },
+                  { key: "sprinkler"    as const, emoji: "💦", name: "Спринклер", desc: "Поливает несколько клеток сразу",        count: farm.items?.sprinklers ?? 0,   color: "cyan" },
+                  { key: "fertilizer"  as const, emoji: "🌱", name: "Удобрение", desc: "100% двойной урожай с грядки",          count: farm.items?.fertilizers ?? 0,  color: "green" },
+                  { key: "lightning"   as const, emoji: "⚡", name: "Молния",    desc: "Мгновенное созревание грядки",           count: farm.items?.lightnings ?? 0,   color: "yellow" },
                 ].map(({ key, emoji, name, desc, count, color }) => {
                   const pressing = pressingId === key;
                   return (

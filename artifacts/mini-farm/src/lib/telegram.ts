@@ -79,16 +79,29 @@ export const getTelegramUser = (): { id: string; username: string; firstName: st
   const tg = getTelegramContext();
   const user = tg?.initDataUnsafe?.user;
   if (user?.id) {
+    const realId = String(user.id);
+    // Persist the real ID so brief context loss doesn't cause a session switch
+    try { localStorage.setItem("tg_real_id", realId); } catch {}
     return {
-      id: String(user.id),
+      id: realId,
       username: user.username ?? "",
       firstName: user.first_name ?? "",
     };
   }
-  const localId = localStorage.getItem("demo_telegram_id") ?? (() => {
-    const id = "demo_" + Math.floor(Math.random() * 10000);
-    localStorage.setItem("demo_telegram_id", id);
-    return id;
+  // Use cached real ID first — covers Android suspend/resume edge cases
+  const cachedRealId = (() => { try { return localStorage.getItem("tg_real_id"); } catch { return null; } })();
+  if (cachedRealId) return { id: cachedRealId, username: "", firstName: "" };
+
+  const localId = (() => {
+    try {
+      return localStorage.getItem("demo_telegram_id") ?? (() => {
+        const id = "demo_" + Math.floor(Math.random() * 10000);
+        localStorage.setItem("demo_telegram_id", id);
+        return id;
+      })();
+    } catch {
+      return "demo_" + Math.floor(Math.random() * 10000);
+    }
   })();
   return { id: localId, username: "", firstName: "Тестовый" };
 };
@@ -96,12 +109,20 @@ export const getTelegramUser = (): { id: string; username: string; firstName: st
 export const getTelegramId = (): string => {
   const tg = getTelegramContext();
   if (tg?.initDataUnsafe?.user?.id) {
-    return String(tg.initDataUnsafe.user.id);
+    const realId = String(tg.initDataUnsafe.user.id);
+    // Persist the real ID so brief context loss doesn't cause a session switch
+    try { localStorage.setItem("tg_real_id", realId); } catch {}
+    return realId;
   }
-  const localId = localStorage.getItem('demo_telegram_id');
-  if (localId) return localId;
-  const newId = 'demo_' + Math.floor(Math.random() * 10000);
-  localStorage.setItem('demo_telegram_id', newId);
+  // Use cached real ID first — covers Android suspend/resume edge cases
+  try {
+    const cachedRealId = localStorage.getItem("tg_real_id");
+    if (cachedRealId) return cachedRealId;
+    const localId = localStorage.getItem("demo_telegram_id");
+    if (localId) return localId;
+  } catch {}
+  const newId = "demo_" + Math.floor(Math.random() * 10000);
+  try { localStorage.setItem("demo_telegram_id", newId); } catch {}
   return newId;
 };
 

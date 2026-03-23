@@ -163,12 +163,13 @@ export function BuildingsTab({ farm }: BuildingsTabProps) {
   const { mutate, isPending } = useFarmAction();
   const [showBuy, setShowBuy] = useState(false);
 
+  const farmBuildings = farm.buildings ?? [];
   const unbuiltBuildings = Object.values(BUILDINGS).filter(
-    (b) => !farm.buildings.some((fb) => fb.type === b.type) && b.unlockLevel <= farm.level
+    (b) => !farmBuildings.some((fb) => fb.type === b.type) && b.unlockLevel <= farm.level
   );
   const lockedBuildings = Object.values(BUILDINGS).filter((b) => b.unlockLevel > farm.level);
 
-  const readyBuildings = farm.buildings.filter(
+  const readyBuildings = farmBuildings.filter(
     (b) => b.crafting && new Date() >= new Date(b.crafting.readyAt)
   ).length;
 
@@ -236,7 +237,7 @@ export function BuildingsTab({ farm }: BuildingsTabProps) {
         )}
       </AnimatePresence>
 
-      {farm.buildings.length === 0 ? (
+      {farmBuildings.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="text-6xl mb-4 opacity-40">🏭</div>
           <h3 className="font-display font-bold text-xl mb-2">Нет зданий</h3>
@@ -249,7 +250,7 @@ export function BuildingsTab({ farm }: BuildingsTabProps) {
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {farm.buildings.map((building) => (
+          {farmBuildings.map((building) => (
             <BuildingCard key={building.id} building={building} farm={farm}
               onStartCraft={(recipe) => mutate({ action: "start_craft", recipe, buildingId: building.id })}
               onCollect={() => mutate({ action: "collect_craft", buildingId: building.id })}

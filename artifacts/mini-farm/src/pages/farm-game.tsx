@@ -73,8 +73,8 @@ function InventorySheet({
   onActivateItem: (item: "watering_can" | "sprinkler" | "fertilizer" | "lightning") => void;
   onStartDrag: (item: DragItemState) => void;
 }) {
-  const seedEntries = Object.entries(farm.seeds).filter(([, c]) => c > 0);
-  const cropEntries = Object.entries(farm.inventory as Record<string, number>).filter(([, c]) => c > 0);
+  const seedEntries = Object.entries(farm.seeds ?? {}).filter(([, c]) => c > 0);
+  const cropEntries = Object.entries((farm.inventory ?? {}) as Record<string, number>).filter(([, c]) => c > 0);
 
   // ── Swipe-to-close via handle (pointer-captured, no framer drag interference) ──
   const dragControls = useDragControls();
@@ -264,8 +264,8 @@ function SeedShopSheet({
   const dragControls = useDragControls();
   const [tab, setTab] = useState<"seeds" | "boosters" | "sell">("seeds");
 
-  const cropSellItems = Object.entries(farm.inventory as Record<string, number>).filter(([, c]) => c > 0);
-  const productSellItems = Object.entries(farm.products).filter(([, c]) => c > 0);
+  const cropSellItems = Object.entries((farm.inventory ?? {}) as Record<string, number>).filter(([, c]) => c > 0);
+  const productSellItems = Object.entries(farm.products ?? {}).filter(([, c]) => c > 0);
 
   const tabs = [
     { id: "seeds"   as const, label: "Семена",  emoji: "🌱" },
@@ -448,7 +448,7 @@ function MapModal({ farm, onClose, onUnlock, onSwitch }: {
 }) {
   const dragControls = useDragControls();
   const mainPlots = farm.activeWorldId === "main"
-    ? farm.plots.length
+    ? (farm.plots?.length ?? 0)
     : (farm.worlds?.["main"] as { plots?: unknown[] } | undefined)?.plots?.length ?? 0;
   const mainAtMax = mainPlots >= 25;
 
@@ -685,16 +685,17 @@ function FieldView({
   const bg1 = hasSkinOverride ? activeSkinDef!.bg1 : (worldId !== "main" && worldCfg ? worldCfg.bg1 : style.bg1);
   const bg2 = hasSkinOverride ? activeSkinDef!.bg2 : (worldId !== "main" && worldCfg ? worldCfg.bg2 : style.bg2);
 
-  const readyCount   = farm.plots.filter((p) => p.status === "ready").length;
-  const growingCount = farm.plots.filter((p) => p.status === "growing").length;
-  const emptyCount   = farm.plots.filter((p) => p.status === "empty").length;
+  const farmPlots    = farm.plots ?? [];
+  const readyCount   = farmPlots.filter((p) => p.status === "ready").length;
+  const growingCount = farmPlots.filter((p) => p.status === "growing").length;
+  const emptyCount   = farmPlots.filter((p) => p.status === "empty").length;
 
-  const nextTier = SECTION_EXPAND_TIERS.find((t) => t.maxPlots > farm.plots.length);
-  const atMax    = farm.plots.length >= 25;
+  const nextTier = SECTION_EXPAND_TIERS.find((t) => t.maxPlots > farmPlots.length);
+  const atMax    = farmPlots.length >= 25;
   const hasLockedWorlds = worldId === "main" && atMax &&
     WORLD_ORDER.filter((w) => w !== "main").some((w) => !(farm.worlds?.[w]?.unlocked));
 
-  const cols = farm.plots.length <= 9 ? 3 : farm.plots.length <= 16 ? 4 : 5;
+  const cols = farmPlots.length <= 9 ? 3 : farmPlots.length <= 16 ? 4 : 5;
 
   return (
     <div
@@ -890,7 +891,7 @@ function FieldView({
               }}
             >
               <IsometricField
-                plots={farm.plots}
+                plots={farmPlots}
                 cols={cols}
                 onTap={onPlotTap}
                 onExpand={onExpandPlots}
@@ -951,10 +952,10 @@ function FieldView({
 
       {/* ── FAB buttons: [🛒 Shop] [🎒 Inventory] ── */}
       {(() => {
-        const totalItems = Object.values(farm.seeds).reduce((a, b) => a + b, 0)
-          + Object.values(farm.inventory as Record<string, number>).reduce((a, b) => a + b, 0)
-          + (farm.items.wateringCans ?? 0) + (farm.items.sprinklers ?? 0) + (farm.items.fertilizers ?? 0) + (farm.items.lightnings ?? 0);
-        const totalSeeds = Object.values(farm.seeds).reduce((a, b) => a + b, 0);
+        const totalItems = Object.values(farm.seeds ?? {}).reduce((a, b) => a + b, 0)
+          + Object.values((farm.inventory ?? {}) as Record<string, number>).reduce((a, b) => a + b, 0)
+          + (farm.items?.wateringCans ?? 0) + (farm.items?.sprinklers ?? 0) + (farm.items?.fertilizers ?? 0) + (farm.items?.lightnings ?? 0);
+        const totalSeeds = Object.values(farm.seeds ?? {}).reduce((a, b) => a + b, 0);
         return (
           <div className="sticky flex justify-end gap-2.5 px-3 pb-2 pt-1 pointer-events-none" style={{ bottom: "calc(var(--safe-bottom, 0px) + 72px)" }}>
             <div className="flex gap-2.5 pointer-events-auto">

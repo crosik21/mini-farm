@@ -56,7 +56,7 @@ export function PlantModal({ isOpen, onClose, plotId, farm }: PlantModalProps) {
     : null;
   const availableCrops = Object.values(allCrops).filter((c) => {
     // Exclusive crops (seedCost=0): only show if player has seeds (includes event crops)
-    if (c.seedCost === 0) return ((farm.seeds as Record<string, number>)[c.id] ?? 0) > 0;
+    if (c.seedCost === 0) return (((farm.seeds ?? {}) as Record<string, number>)[c.id] ?? 0) > 0;
     return worldCropIds ? worldCropIds.includes(c.id) : c.unlockLevel <= farm.level;
   });
   const noEnergy = farm.energy < 2;
@@ -74,7 +74,7 @@ export function PlantModal({ isOpen, onClose, plotId, farm }: PlantModalProps) {
       {/* Crop grid */}
       <div className="grid grid-cols-2 gap-3 pb-4">
         {availableCrops.map((crop) => {
-          const seedCount = (farm.seeds as Record<string, number>)[crop.id] ?? 0;
+          const seedCount = ((farm.seeds ?? {}) as Record<string, number>)[crop.id] ?? 0;
           const hasSeeds = seedCount > 0;
           const canPlant = hasSeeds && !noEnergy && !isPending;
 

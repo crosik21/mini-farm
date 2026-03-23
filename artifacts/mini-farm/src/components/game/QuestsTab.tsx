@@ -63,9 +63,9 @@ function QuestCard({ quest, onClaim, isPending }: { quest: QuestState; onClaim: 
 export function QuestsTab({ farm }: QuestsTabProps) {
   const { mutate, isPending } = useFarmAction();
 
-  const daily = farm.quests.filter((q) => q.type === "daily");
-  const story = farm.quests.filter((q) => q.type === "story");
-  const claimable = farm.quests.filter((q) => q.completed && !q.claimed).length;
+  const daily = (farm.quests ?? []).filter((q) => q.type === "daily");
+  const story = (farm.quests ?? []).filter((q) => q.type === "story");
+  const claimable = (farm.quests ?? []).filter((q) => q.completed && !q.claimed).length;
 
   return (
     <div className="p-4 pb-6">

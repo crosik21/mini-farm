@@ -116,10 +116,10 @@ export function ProfileTab({ farm }: { farm: FarmData }) {
     );
   };
 
-  const completedQuests = farm.quests.filter((q) => q.claimed).length;
-  const totalQuests = farm.quests.length;
-  const readyPlots = farm.plots.filter((p) => p.status === "ready").length;
-  const happyAnimals = farm.animals.filter((a) => a.status === "happy" || a.status === "ready").length;
+  const completedQuests = (farm.quests ?? []).filter((q) => q.claimed).length;
+  const totalQuests = (farm.quests ?? []).length;
+  const readyPlots = (farm.plots ?? []).filter((p) => p.status === "ready").length;
+  const happyAnimals = (farm.animals ?? []).filter((a) => a.status === "happy" || a.status === "ready").length;
 
   const seeds = farm.seeds ?? {};
   const products = farm.products ?? {};
@@ -145,9 +145,9 @@ export function ProfileTab({ farm }: { farm: FarmData }) {
     : `${totalPlayMinutes}м`;
 
   const statCards = [
-    { icon: <Wheat size={17} />,   label: "Грядок",    value: farm.plots.length,             color: "text-amber-600" },
-    { icon: <Cat size={17} />,     label: "Животных",  value: farm.animals.length,            color: "text-pink-500" },
-    { icon: <Factory size={17} />, label: "Зданий",    value: farm.buildings.length,          color: "text-slate-500" },
+    { icon: <Wheat size={17} />,   label: "Грядок",    value: (farm.plots ?? []).length,             color: "text-amber-600" },
+    { icon: <Cat size={17} />,     label: "Животных",  value: (farm.animals ?? []).length,            color: "text-pink-500" },
+    { icon: <Factory size={17} />, label: "Зданий",    value: (farm.buildings ?? []).length,          color: "text-slate-500" },
     { icon: <Trophy size={17} />,  label: "Заданий",   value: `${completedQuests}/${totalQuests}`, color: "text-yellow-500" },
     { icon: <Globe size={17} />,   label: "Семян",     value: totalSeeds,                     color: "text-green-600" },
     { icon: <Package size={17} />, label: "Продуктов", value: totalProducts,                  color: "text-blue-500" },

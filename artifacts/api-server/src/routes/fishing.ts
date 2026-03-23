@@ -90,7 +90,14 @@ router.post("/start", async (req, res) => {
     }
 
     const fish = pickFish();
-    const waitSec = Math.floor(Math.random() * (fish.maxWaitSec - fish.minWaitSec + 1)) + fish.minWaitSec;
+    let waitSec = Math.floor(Math.random() * (fish.maxWaitSec - fish.minWaitSec + 1)) + fish.minWaitSec;
+
+    // fish_sense skill: -15% wait time
+    const unlockedSkills: string[] = (farm.unlockedSkills as string[] | null) ?? [];
+    if (unlockedSkills.includes("fish_sense")) {
+      waitSec = Math.max(10, Math.floor(waitSec * 0.85));
+    }
+
     const now = new Date();
     const catchAt = new Date(now.getTime() + waitSec * 1000);
 

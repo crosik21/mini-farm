@@ -16,7 +16,7 @@ interface ShopTabProps {
 
 export function ShopTab({ farm }: ShopTabProps) {
   const [section, setSection] = useState<ShopSection>("seeds");
-  const claimable = farm.quests.filter((q) => q.completed && !q.claimed).length;
+  const claimable = (farm.quests ?? []).filter((q) => q.completed && !q.claimed).length;
 
   const tabs: { id: ShopSection; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: "seeds",  label: "Семена",  icon: <Sprout size={15} /> },

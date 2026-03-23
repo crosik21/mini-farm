@@ -1117,7 +1117,7 @@ async function getOrCreateFarm(telegramId: string) {
   if (existing.length > 0) {
     const farm = existing[0];
     const currentWeatherForNorm = getCurrentWeather();
-    const plots = updatePlotStatuses(farm.plots as PlotState[], currentWeatherForNorm);
+    const plots = updatePlotStatuses((farm.plots as PlotState[]) || [], currentWeatherForNorm);
     const animals = updateAnimalStatuses((farm.animals as AnimalState[]) || []);
     const buildings = updateCraftStatuses((farm.buildings as BuildingState[]) || []);
     const season = getCurrentSeason(farm.seasonUpdatedAt instanceof Date ? farm.seasonUpdatedAt : new Date(farm.seasonUpdatedAt));
@@ -1387,9 +1387,10 @@ router.post("/:telegramId/action", async (req, res) => {
       if (!cfg) return res.status(400).json({ error: "Неизвестная культура" });
       if (energy < PLANT_ENERGY) return res.status(400).json({ error: `Нужно ${PLANT_ENERGY} энергии для посадки` });
 
-      // baseGrowMs = season+world mult applied, weather excluded — used for dynamic weather recalculation
+      // baseGrowMs = season+world+speed mult applied, weather excluded — used for dynamic weather recalculation
+      // growSpeedMult is included so weather-change recalculation in updatePlotStatuses preserves the pet/skill bonus
       const baseMultiplier = (SEASON_GROWTH_MULTIPLIER[season] ?? 1) * worldCfg.growMultiplier;
-      const baseGrowMs = Math.ceil(cfg.growSec * baseMultiplier) * 1000;
+      const baseGrowMs = Math.ceil(cfg.growSec * baseMultiplier * growSpeedMult) * 1000;
       const growMult = baseMultiplier * WEATHER_GROW_MULT[currentWeather];
       const growSec = Math.ceil(cfg.growSec * growMult * growSpeedMult);
       const now = new Date();
@@ -1739,7 +1740,7 @@ router.post("/:telegramId/action", async (req, res) => {
       if (available < quantity) return res.status(400).json({ error: "Недостаточно продуктов" });
       const sellMult = SEASON_SELL_MULTIPLIER[season] ?? 1;
       const price = PRODUCT_SELL_PRICE[cropType] ?? 10;
-      const earned = Math.floor(price * sellMult) * quantity;
+      const earned = Math.floor(price * sellMult * harvestCoinMult) * quantity;
       coins += earned;
       products[productKey] -= quantity;
       quests = updateQuestProgress(quests, "sell_product", cropType, quantity);
@@ -1772,7 +1773,7 @@ router.post("/:telegramId/action", async (req, res) => {
         const n = (qty as number) ?? 0;
         if (n <= 0) continue;
         const price = PRODUCT_SELL_PRICE[prodId] ?? 10;
-        const earned = Math.floor(price * sellMult) * n;
+        const earned = Math.floor(price * sellMult * harvestCoinMult) * n;
         coins += earned;
         totalEarned += earned;
         totalSoldQty += n;

@@ -143,15 +143,16 @@ export function AnimalsTab({ farm }: AnimalsTabProps) {
   const availableAnimalTypes = Object.values(ANIMALS).filter((a) => a.unlockLevel <= farm.level);
   const lockedAnimalTypes = Object.values(ANIMALS).filter((a) => a.unlockLevel > farm.level);
 
-  const readyCount = farm.animals.filter((a) => a.status === "ready").length;
-  const hungryCount = farm.animals.filter((a) => a.status === "hungry").length;
+  const farmAnimals = farm.animals ?? [];
+  const readyCount = farmAnimals.filter((a) => a.status === "ready").length;
+  const hungryCount = farmAnimals.filter((a) => a.status === "hungry").length;
 
   return (
     <div className="p-4 pb-6">
       <div className="flex items-center justify-between mb-3">
         <div>
           <h2 className="font-display font-bold text-xl">🐾 Животные</h2>
-          {farm.animals.length > 0 && (
+          {farmAnimals.length > 0 && (
             <div className="flex gap-2 mt-0.5">
               {readyCount > 0 && (
                 <span className="text-[10px] bg-green-100 text-green-700 font-bold px-2 py-0.5 rounded-full">
@@ -189,13 +190,13 @@ export function AnimalsTab({ farm }: AnimalsTabProps) {
               <div className="grid grid-cols-2 gap-2">
                 {availableAnimalTypes.map((cfg) => {
                   const canAfford = farm.coins >= cfg.cost;
-                  const owned = farm.animals.filter((a) => a.type === cfg.type).length;
+                  const owned = farmAnimals.filter((a) => a.type === cfg.type).length;
                   const product = PRODUCTS[cfg.productType];
                   return (
                     <motion.button key={cfg.type}
                       whileTap={{ scale: 0.95 }}
                       onClick={() => { mutate({ action: "buy_animal", cropType: cfg.type }); setShowBuy(false); }}
-                      disabled={!canAfford || isPending || farm.animals.length >= 8}
+                      disabled={!canAfford || isPending || farmAnimals.length >= 8}
                       className="flex items-center gap-2 p-3 rounded-xl border-2 text-left
                         bg-card border-card-border hover:border-primary active:translate-y-0.5
                         disabled:opacity-40 disabled:cursor-not-allowed">
@@ -210,7 +211,7 @@ export function AnimalsTab({ farm }: AnimalsTabProps) {
                   );
                 })}
               </div>
-              {farm.animals.length >= 8 && (
+              {farmAnimals.length >= 8 && (
                 <p className="text-center text-xs text-muted-foreground mt-2">Максимум 8 животных</p>
               )}
             </div>
@@ -218,7 +219,7 @@ export function AnimalsTab({ farm }: AnimalsTabProps) {
         )}
       </AnimatePresence>
 
-      {farm.animals.length === 0 ? (
+      {farmAnimals.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="text-6xl mb-4 opacity-40">🐾</div>
           <h3 className="font-display font-bold text-xl mb-2">Нет животных</h3>
@@ -231,7 +232,7 @@ export function AnimalsTab({ farm }: AnimalsTabProps) {
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3">
-          {farm.animals.map((animal) => (
+          {farmAnimals.map((animal) => (
             <AnimalCard key={animal.id} animal={animal}
               onFeed={() => mutate({ action: "feed_animal", animalId: animal.id })}
               onCollect={() => mutate({ action: "collect_product", animalId: animal.id })}

@@ -129,7 +129,7 @@ export function MarketTab({ farm }: MarketTabProps) {
       </p>
 
       <div className="flex flex-col gap-3">
-        {farm.npcOrders.map((order) => (
+        {(farm.npcOrders ?? []).map((order) => (
           <NpcOrderCard key={order.id} order={order} farm={farm}
             onComplete={() => mutate({ action: "complete_npc_order", orderId: order.id } as any)}
             isPending={isPending} />

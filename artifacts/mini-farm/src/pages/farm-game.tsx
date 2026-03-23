@@ -77,7 +77,7 @@ function InventorySheet({
   const seedEntries = Object.entries(farm.seeds ?? {}).filter(([, c]) => c > 0);
   const cropEntries = Object.entries((farm.inventory ?? {}) as Record<string, number>).filter(([, c]) => c > 0);
 
-  const { sheetProps, handlePointerDownHandle } = useExpandableSheet(onClose);
+  const { sheetProps, handlePointerDownHandle, defaultY } = useExpandableSheet(onClose);
 
   // ── Long-press for drag-to-field ─────────────────────────────────────────────
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -126,8 +126,8 @@ function InventorySheet({
             <button onClick={onClose} className="text-gray-400 text-xl leading-none w-8 h-8 flex items-center justify-center">✕</button>
           </div>
 
-          {/* Scrollable content */}
-          <div className="overflow-y-auto flex-1 pb-4" style={{ touchAction: "pan-y", overscrollBehavior: "contain" }}>
+          {/* Scrollable content — paddingBottom compensates for the 15% translateY offset so last items are reachable */}
+          <div className="overflow-y-auto flex-1" style={{ touchAction: "pan-y", overscrollBehavior: "contain", paddingBottom: `${defaultY + 16}px` }}>
 
             {/* ── Семена ── */}
             <section className="px-5 mb-5">
@@ -249,7 +249,7 @@ function SeedShopSheet({
   onActivateItem: (item: "watering_can" | "sprinkler" | "fertilizer" | "lightning") => void;
 }) {
   const { mutate, isPending } = useFarmAction();
-  const { sheetProps, handlePointerDownHandle } = useExpandableSheet(onClose);
+  const { sheetProps, handlePointerDownHandle, defaultY } = useExpandableSheet(onClose);
   const [tab, setTab] = useState<"seeds" | "boosters" | "sell">("seeds");
 
   const cropSellItems = Object.entries((farm.inventory ?? {}) as Record<string, number>).filter(([, c]) => c > 0);
@@ -311,8 +311,8 @@ function SeedShopSheet({
             })}
           </div>
 
-          {/* Scrollable content */}
-          <div className="overflow-y-auto flex-1 px-5 pb-4" style={{ touchAction: "pan-y", overscrollBehavior: "contain" }}>
+          {/* Scrollable content — paddingBottom compensates for the 15% translateY offset so last items are reachable */}
+          <div className="overflow-y-auto flex-1 px-5" style={{ touchAction: "pan-y", overscrollBehavior: "contain", paddingBottom: `${defaultY + 16}px` }}>
             {/* ── Семена (ротирующий магазин) ── */}
             {tab === "seeds" && <div className="-mx-5"><SeedShopTab farm={farm} /></div>}
 

@@ -81,5 +81,5 @@ export function useExpandableSheet(onClose: () => void) {
     style: { height: "100vh" } as React.CSSProperties,
   };
 
-  return { dragControls, isExpanded, sheetProps, handlePointerDownHandle };
+  return { dragControls, isExpanded, defaultY, sheetProps, handlePointerDownHandle };
 }

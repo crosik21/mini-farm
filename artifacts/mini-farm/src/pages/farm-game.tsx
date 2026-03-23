@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence, useDragControls } from "framer-motion";
-import { useFarm, useFarmAction, saveFarmCache } from "@/hooks/use-farm";
+import { useFarm, useFarmAction } from "@/hooks/use-farm";
 import { PlotState, FarmData, WorldId } from "@/lib/types";
 import { CROPS, PRODUCTS, SEASON_CONFIG } from "@/lib/constants";
 import { EmojiImg } from "@/components/ui/emoji-img";
@@ -1115,12 +1115,6 @@ export default function FarmGame() {
   const { data: farm, isError, refetch, isFetching } = useFarm();
   const { mutate: performAction, isPending } = useFarmAction();
 
-  // Persist successful farm data to sessionStorage so the next page load
-  // can seed the React Query cache and skip the loading screen entirely.
-  useEffect(() => {
-    if (farm && typeof farm.coins === "number") saveFarmCache(farm);
-  }, [farm]);
-
   const [activeTab, setActiveTab] = useState<Tab>("farm");
   const [farmSection, setFarmSection] = useState<FarmSection>("field");
   const [activePlotId, setActivePlotId] = useState<number | null>(null);
@@ -1231,13 +1225,11 @@ export default function FarmGame() {
     performAction({ action: "use_item", itemType, plotId });
   };
 
-  if (!farm) {
+  if (!farm && !isError) {
     return (
-      <div className="min-h-screen bg-background">
-        <div className="fixed top-4 right-4 flex items-center gap-2 bg-card border border-border rounded-full px-3 py-1.5 shadow-sm z-50">
-          <span className="text-sm animate-spin">🌱</span>
-          <span className="text-xs text-muted-foreground">Загрузка…</span>
-        </div>
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
+        <span className="text-6xl animate-bounce">🌱</span>
+        <p className="text-base font-medium text-muted-foreground">Загрузка фермы…</p>
       </div>
     );
   }
@@ -1255,18 +1247,6 @@ export default function FarmGame() {
         >
           {isFetching ? "Подключение…" : "Попробовать снова"}
         </button>
-      </div>
-    );
-  }
-
-  // Guard against stale/malformed data (e.g. cached from a broken API response)
-  if (!farm || typeof farm.coins !== "number") {
-    return (
-      <div className="min-h-screen bg-background">
-        <div className="fixed top-4 right-4 flex items-center gap-2 bg-card border border-border rounded-full px-3 py-1.5 shadow-sm z-50">
-          <span className="text-sm animate-spin">🌱</span>
-          <span className="text-xs text-muted-foreground">Загрузка…</span>
-        </div>
       </div>
     );
   }

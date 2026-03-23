@@ -127,7 +127,7 @@ function InventorySheet({
           </div>
 
           {/* Scrollable content */}
-          <div className="overflow-y-auto flex-1 pb-4" style={{ touchAction: "pan-y" }}>
+          <div className="overflow-y-auto flex-1 pb-4" style={{ touchAction: "pan-y", overscrollBehavior: "contain" }}>
 
             {/* ── Семена ── */}
             <section className="px-5 mb-5">
@@ -147,7 +147,7 @@ function InventorySheet({
                           animate={{ scale: pressing ? 1.14 : 1 }}
                           transition={{ type: "spring", stiffness: 400, damping: 18 }}
                           className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-2xl px-3 py-2 select-none"
-                          style={{ touchAction: "none", cursor: "grab" }}
+                          style={{ touchAction: pressing ? "none" : "pan-y", cursor: "grab" }}
                           onPointerDown={e => startLongPress(e, { type: "seed", cropId, emoji: crop.emoji, x: e.clientX, y: e.clientY })}
                           onPointerUp={cancelLongPress}
                           onPointerLeave={cancelLongPress}
@@ -207,7 +207,7 @@ function InventorySheet({
                       animate={{ scale: pressing ? 1.04 : 1 }}
                       transition={{ type: "spring", stiffness: 400, damping: 18 }}
                       className={`flex items-center gap-3 bg-${color}-50 border border-${color}-200 rounded-2xl px-4 py-3 select-none`}
-                      style={count > 0 ? { touchAction: "none", cursor: "grab" } : undefined}
+                      style={count > 0 ? { touchAction: pressing ? "none" : "pan-y", cursor: "grab" } : undefined}
                       onPointerDown={count > 0 ? e => startLongPress(e, { type: "booster", boosterType: key, emoji, x: e.clientX, y: e.clientY }) : undefined}
                       onPointerUp={cancelLongPress}
                       onPointerLeave={cancelLongPress}
@@ -312,7 +312,7 @@ function SeedShopSheet({
           </div>
 
           {/* Scrollable content */}
-          <div className="overflow-y-auto flex-1 px-5 pb-4" style={{ touchAction: "pan-y" }}>
+          <div className="overflow-y-auto flex-1 px-5 pb-4" style={{ touchAction: "pan-y", overscrollBehavior: "contain" }}>
             {/* ── Семена (ротирующий магазин) ── */}
             {tab === "seeds" && <div className="-mx-5"><SeedShopTab farm={farm} /></div>}
 

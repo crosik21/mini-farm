@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useExpandableSheet } from "@/hooks/use-expandable-sheet";
 import { useFarmAction } from "@/hooks/use-farm";
-import { FarmData, FarmPass, PassLevelReward, PassReward } from "@/lib/types";
+import { FarmData, FarmPass, PassReward } from "@/lib/types";
 import { Lock, Star, CheckCircle } from "lucide-react";
 
 interface FarmPassTabProps {

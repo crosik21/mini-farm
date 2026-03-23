@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { motion, AnimatePresence, useDragControls } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useFarm, useFarmAction } from "@/hooks/use-farm";
 import { useExpandableSheet } from "@/hooks/use-expandable-sheet";
 import { PlotState, FarmData, WorldId } from "@/lib/types";

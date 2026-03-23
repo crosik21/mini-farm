@@ -602,6 +602,8 @@ function FieldView({
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   // After drag ends, block ghost clicks for 400 ms
   const blockClickRef = useRef(false);
+  // Tracks which plots were already planted in the current drag session
+  const plantedInDragRef = useRef<Set<number>>(new Set());
 
   // Keep ref in sync with state
   useEffect(() => { dragItemRef.current = dragItem; }, [dragItem]);
@@ -642,13 +644,35 @@ function FieldView({
   // ── Drag overlay handlers (no global listeners — overlay div receives events) ─
   const handleOverlayMove = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
     const cx = e.clientX, cy = e.clientY;
+
+    // Update ghost position (throttled via rAF)
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => {
       setDragItem(prev => prev ? { ...prev, x: cx, y: cy } : null);
       rafRef.current = null;
     });
-  }, []);
+
+    // ── Multi-plant: plant on every empty plot the pointer passes over ──
+    const cur = dragItemRef.current;
+    if (cur?.type === "seed" && cur.cropId) {
+      const overlay = e.currentTarget as HTMLElement;
+      overlay.style.pointerEvents = "none";
+      const el = document.elementFromPoint(cx, cy) as HTMLElement | null;
+      overlay.style.pointerEvents = "all";
+
+      const plotIdStr  = el?.getAttribute("data-plot-id");
+      const plotStatus = el?.getAttribute("data-plot-status");
+
+      if (plotIdStr && plotStatus === "empty") {
+        const plotId = parseInt(plotIdStr);
+        if (!plantedInDragRef.current.has(plotId)) {
+          plantedInDragRef.current.add(plotId);
+          onPlantDirect(plotId, cur.cropId);
+        }
+      }
+    }
+  }, [onPlantDirect]);
 
   const handleOverlayUp = useCallback((e: React.PointerEvent) => {
     const cur = dragItemRef.current;
@@ -667,11 +691,15 @@ function FieldView({
     if (plotIdStr) {
       const plotId = parseInt(plotIdStr);
       if (cur.type === "seed" && cur.cropId && plotStatus === "empty") {
-        onPlantDirect(plotId, cur.cropId);
+        // Only plant if this plot wasn't already planted during the move phase
+        if (!plantedInDragRef.current.has(plotId)) {
+          onPlantDirect(plotId, cur.cropId);
+        }
       } else if (cur.type === "booster" && cur.boosterType) {
         onUseItemDirect(plotId, cur.boosterType);
       }
     }
+    plantedInDragRef.current = new Set();
     setDragItem(null);
     setInventoryOpen(false);
     // Block the synthetic ghost-click that fires ~16-300ms after pointer-up
@@ -1001,7 +1029,7 @@ function FieldView({
           farm={farm}
           onClose={() => setInventoryOpen(false)}
           onActivateItem={(item) => { onActivateItem(item); setInventoryOpen(false); }}
-          onStartDrag={(item) => { setDragItem(item); }}
+          onStartDrag={(item) => { plantedInDragRef.current = new Set(); setDragItem(item); }}
         />
       )}
 
@@ -1024,6 +1052,7 @@ function FieldView({
             onPointerMove={handleOverlayMove}
             onPointerUp={handleOverlayUp}
             onPointerCancel={() => {
+              plantedInDragRef.current = new Set();
               setDragItem(null); setInventoryOpen(false);
               blockClickRef.current = true;
               setTimeout(() => { blockClickRef.current = false; }, 400);

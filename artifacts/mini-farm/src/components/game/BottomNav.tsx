@@ -187,7 +187,7 @@ export function BottomNav({ activeTab, onTabChange, shopBadge, profileBadge, tel
 
       {/* Main nav bar — fixed at bottom so it's always visible regardless of viewport changes */}
       <div
-        className="fixed bottom-0 left-0 right-0 z-30"
+        className="fixed bottom-0 left-0 right-0 z-[60]"
         style={{
           background: "var(--nav-bg, rgba(255,255,255,0.94))",
           backdropFilter: "blur(16px)",

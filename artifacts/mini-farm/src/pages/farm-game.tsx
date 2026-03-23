@@ -126,8 +126,8 @@ function InventorySheet({
             <button onClick={onClose} className="text-gray-400 text-xl leading-none w-8 h-8 flex items-center justify-center">✕</button>
           </div>
 
-          {/* Scrollable content — paddingBottom compensates for the 15% translateY offset so last items are reachable */}
-          <div className="overflow-y-auto flex-1" style={{ touchAction: "pan-y", overscrollBehavior: "contain", paddingBottom: `${defaultY + 16}px` }}>
+          {/* Scrollable content — paddingBottom compensates for the 15% translateY offset + nav bar height so last items are reachable */}
+          <div className="overflow-y-auto flex-1" style={{ touchAction: "pan-y", overscrollBehavior: "contain", paddingBottom: `${defaultY + 84}px` }}>
 
             {/* ── Семена ── */}
             <section className="px-5 mb-5">
@@ -311,8 +311,8 @@ function SeedShopSheet({
             })}
           </div>
 
-          {/* Scrollable content — paddingBottom compensates for the 15% translateY offset so last items are reachable */}
-          <div className="overflow-y-auto flex-1 px-5" style={{ touchAction: "pan-y", overscrollBehavior: "contain", paddingBottom: `${defaultY + 16}px` }}>
+          {/* Scrollable content — paddingBottom compensates for the 15% translateY offset + nav bar height so last items are reachable */}
+          <div className="overflow-y-auto flex-1 px-5" style={{ touchAction: "pan-y", overscrollBehavior: "contain", paddingBottom: `${defaultY + 84}px` }}>
             {/* ── Семена (ротирующий магазин) ── */}
             {tab === "seeds" && <div className="-mx-5"><SeedShopTab farm={farm} /></div>}
 

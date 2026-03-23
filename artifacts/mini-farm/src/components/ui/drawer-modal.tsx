@@ -56,7 +56,7 @@ export function DrawerModal({ isOpen, onClose, title, children, icon }: DrawerMo
             </div>
 
             {/* Scrollable content */}
-            <div className="flex-1 overflow-y-auto p-6 hide-scrollbar" style={{ touchAction: "pan-y", overscrollBehavior: "contain", paddingBottom: `${defaultY + 24}px` }}>
+            <div className="flex-1 overflow-y-auto p-6 hide-scrollbar" style={{ touchAction: "pan-y", overscrollBehavior: "contain", paddingBottom: `${defaultY + 92}px` }}>
               {children}
             </div>
           </motion.div>

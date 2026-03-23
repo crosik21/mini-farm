@@ -9,7 +9,7 @@ export const farmStateTable = pgTable("farm_states", {
   level: integer("level").notNull().default(1),
   xp: integer("xp").notNull().default(0),
   energy: integer("energy").notNull().default(30),
-  maxEnergy: integer("max_energy").notNull().default(30),
+  maxEnergy: integer("max_energy").notNull().default(50),
   lastEnergyRegen: timestamp("last_energy_regen").notNull().defaultNow(),
   season: text("season").notNull().default("spring"),
   seasonUpdatedAt: timestamp("season_updated_at").notNull().defaultNow(),

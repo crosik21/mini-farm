@@ -455,7 +455,7 @@ export interface SkillNode {
   bonusLabel: string;
   cost: number;
   prereq: string | null;
-  branch: "farm" | "trade" | "fishing";
+  branch: "farm" | "trade" | "fishing" | "energy";
   row: number;
 }
 
@@ -528,6 +528,29 @@ export const SKILL_NODES: SkillNode[] = [
     branch: "trade",
     row: 2,
   },
+  // ── Energy branch ────────────────────────────────────────────
+  {
+    id: "energy_1",
+    name: "Запас энергии I",
+    emoji: "⚡",
+    description: "Увеличивает максимальный запас энергии.",
+    bonusLabel: "+10 макс. энергии",
+    cost: 2,
+    prereq: null,
+    branch: "energy",
+    row: 0,
+  },
+  {
+    id: "energy_2",
+    name: "Запас энергии II",
+    emoji: "⚡⚡",
+    description: "Ещё больше максимальной энергии.",
+    bonusLabel: "+10 макс. энергии",
+    cost: 3,
+    prereq: "energy_1",
+    branch: "energy",
+    row: 1,
+  },
   // ── Fishing branch ───────────────────────────────────────────
   {
     id: "fish_sense",
@@ -565,7 +588,8 @@ export const SKILL_NODES: SkillNode[] = [
 ];
 
 export const SKILL_BRANCH_META: Record<SkillNode["branch"], { label: string; emoji: string; color: string; bg: string; border: string; text: string }> = {
-  farm:    { label: "Фермер",   emoji: "🌱", color: "green",  bg: "bg-green-50 dark:bg-green-950/30",  border: "border-green-400", text: "text-green-700 dark:text-green-400" },
-  trade:   { label: "Торговец", emoji: "💰", color: "amber",  bg: "bg-amber-50 dark:bg-amber-950/30",  border: "border-amber-400", text: "text-amber-700 dark:text-amber-400" },
-  fishing: { label: "Рыбак",   emoji: "🎣", color: "blue",   bg: "bg-blue-50 dark:bg-blue-950/30",   border: "border-blue-400",  text: "text-blue-700 dark:text-blue-400" },
+  farm:    { label: "Фермер",   emoji: "🌱", color: "green",  bg: "bg-green-50 dark:bg-green-950/30",   border: "border-green-400",  text: "text-green-700 dark:text-green-400" },
+  trade:   { label: "Торговец", emoji: "💰", color: "amber",  bg: "bg-amber-50 dark:bg-amber-950/30",   border: "border-amber-400",  text: "text-amber-700 dark:text-amber-400" },
+  energy:  { label: "Энергия",  emoji: "⚡", color: "yellow", bg: "bg-yellow-50 dark:bg-yellow-950/30", border: "border-yellow-400", text: "text-yellow-700 dark:text-yellow-400" },
+  fishing: { label: "Рыбак",    emoji: "🎣", color: "blue",   bg: "bg-blue-50 dark:bg-blue-950/30",    border: "border-blue-400",   text: "text-blue-700 dark:text-blue-400" },
 };

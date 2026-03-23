@@ -1203,8 +1203,8 @@ async function getOrCreateFarm(telegramId: string) {
     gems: 5,
     level: 1,
     xp: 0,
-    energy: 30,
-    maxEnergy: 30,
+    energy: 50,
+    maxEnergy: 50,
     lastEnergyRegen: now,
     season: "spring" as Season,
     seasonUpdatedAt: now,
@@ -2513,11 +2513,16 @@ router.post("/:telegramId/action", async (req, res) => {
         grow_1: 1, grow_2: 2, master_harvest: 3,
         discount_1: 1, discount_2: 2, rich_harvest: 2,
         fish_sense: 1, fish_luck: 2, master_fishing: 3,
+        energy_1: 2, energy_2: 3,
       };
       const SKILL_PREREQS: Record<string, string | null> = {
         grow_1: null, grow_2: "grow_1", master_harvest: "grow_2",
         discount_1: null, discount_2: "discount_1", rich_harvest: "discount_2",
         fish_sense: null, fish_luck: "fish_sense", master_fishing: "fish_luck",
+        energy_1: null, energy_2: "energy_1",
+      };
+      const SKILL_ENERGY_BONUS: Record<string, number> = {
+        energy_1: 10, energy_2: 10,
       };
       const cost = SKILL_COSTS[skillId];
       if (cost === undefined) return res.status(400).json({ error: "Неизвестный навык" });
@@ -2526,11 +2531,13 @@ router.post("/:telegramId/action", async (req, res) => {
       if (currPoints < cost) return res.status(400).json({ error: "Недостаточно очков навыков" });
       const newSkills = [...currSkills, skillId];
       const newPoints = currPoints - cost;
-      await db.update(farmStateTable).set({ unlockedSkills: newSkills, skillPoints: newPoints, updatedAt: new Date() })
+      const energyBonus = SKILL_ENERGY_BONUS[skillId] ?? 0;
+      const newMaxEnergy = farm.maxEnergy + energyBonus;
+      await db.update(farmStateTable).set({ unlockedSkills: newSkills, skillPoints: newPoints, maxEnergy: newMaxEnergy, updatedAt: new Date() })
         .where(eq(farmStateTable.telegramId, telegramId));
       const farmPassUS = await getOrCreateFarmPass(telegramId);
       const playerAchsUS = await getPlayerAchievements(telegramId);
-      return res.json({ ...serializeFarm({ ...farm, unlockedSkills: newSkills, skillPoints: newPoints }, telegramId), farmPass: serializeFarmPass(farmPassUS), achievements: buildAchievementsResponse(playerAchsUS) });
+      return res.json({ ...serializeFarm({ ...farm, unlockedSkills: newSkills, skillPoints: newPoints, maxEnergy: newMaxEnergy }, telegramId), farmPass: serializeFarmPass(farmPassUS), achievements: buildAchievementsResponse(playerAchsUS) });
 
     } else {
       return res.status(400).json({ error: "Неизвестное действие" });

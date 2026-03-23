@@ -9,7 +9,7 @@ interface Props {
 }
 
 type Branch = SkillNode["branch"];
-const BRANCHES: Branch[] = ["farm", "trade", "fishing"];
+const BRANCHES: Branch[] = ["farm", "trade", "energy", "fishing"];
 
 export default function SkillTreeTab({ farm }: Props) {
   const { mutate: performAction, isPending } = useFarmAction();

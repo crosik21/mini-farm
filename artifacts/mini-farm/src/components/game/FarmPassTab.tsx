@@ -299,7 +299,7 @@ export function FarmPassTab({ farm }: FarmPassTabProps) {
             <motion.div
               initial={{ y: 120 }} animate={{ y: 0 }} exit={{ y: 120 }}
               transition={{ type: "spring", stiffness: 400, damping: 38 }}
-              className="bg-card border border-border rounded-3xl p-6 w-full max-w-sm"
+              className="bg-card border border-border rounded-3xl p-6 w-full max-w-sm max-h-[85vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="text-center mb-4">

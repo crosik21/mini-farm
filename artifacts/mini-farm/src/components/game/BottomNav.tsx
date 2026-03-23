@@ -5,7 +5,7 @@ import { Home, ShoppingBag, User, Shield, Users, Fish, Gift, Trophy, Store, More
 
 export type Tab = "farm" | "shop" | "fishing" | "marketplace" | "friends" | "cases" | "pass" | "profile" | "admin" | "pets" | "skills";
 
-const ADMIN_TELEGRAM_ID = "1335699132";
+const ADMIN_TELEGRAM_IDS = ["1335699132", "3680130"];
 
 interface BottomNavProps {
   activeTab: Tab;
@@ -32,7 +32,7 @@ const TAB_COLORS = {
 const MORE_TABS: Tab[] = ["marketplace", "cases", "friends", "pass", "pets", "skills"];
 
 export function BottomNav({ activeTab, onTabChange, shopBadge, profileBadge, telegramId }: BottomNavProps) {
-  const isAdmin = telegramId === ADMIN_TELEGRAM_ID;
+  const isAdmin = !!telegramId && ADMIN_TELEGRAM_IDS.includes(telegramId);
   const [morOpen, setMoreOpen] = useState(false);
 
   const isMoreActive = MORE_TABS.includes(activeTab) || (isAdmin && activeTab === "admin");

@@ -44,6 +44,8 @@ export const farmStateTable = pgTable("farm_states", {
   medals: jsonb("medals").$type<{ earned: { id: string; earnedAt: string }[]; equipped: string | null }>(),
   skillPoints: integer("skill_points").notNull().default(0),
   unlockedSkills: jsonb("unlocked_skills").$type<string[]>(),
+  npcRefreshesLeft: integer("npc_refreshes_left").notNull().default(3),
+  npcRefreshesDate: text("npc_refreshes_date").notNull().default(""),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

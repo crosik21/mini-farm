@@ -306,6 +306,7 @@ export interface FarmData {
   medals: { earned: { id: string; earnedAt: string }[]; equipped: string | null };
   skillPoints: number;
   unlockedSkills: string[];
+  npcRefreshesLeft: number;
   updatedAt: string;
 }
 
@@ -379,7 +380,7 @@ export type FarmAction =
   | { action: "redeem_promo"; promoCode: string }
   | { action: "complete_npc_order"; orderId: string }
   | { action: "claim_quest"; questId: string }
-  | { action: "refresh_orders" }
+  | { action: "refresh_orders"; useGems?: boolean }
   | { action: "buy_energy"; amount: number }
   | { action: "expand_plots" }
   | { action: "harvest_all" }

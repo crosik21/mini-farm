@@ -87,18 +87,46 @@ function NpcOrderCard({ order, farm, onComplete, isPending }: {
   );
 }
 
+const NPC_REFRESH_GEM_COST = 5;
+
 export function MarketTab({ farm }: MarketTabProps) {
   const { mutate, isPending } = useFarmAction();
+  const refreshesLeft = farm.npcRefreshesLeft ?? 3;
+  const hasFreeRefresh = refreshesLeft > 0;
+
+  const handleRefresh = () => {
+    if (hasFreeRefresh) {
+      mutate({ action: "refresh_orders" });
+    } else {
+      mutate({ action: "refresh_orders", useGems: true });
+    }
+  };
 
   return (
     <div className="p-4 pb-6">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-2">
         <h2 className="font-display font-bold text-xl">🏪 Заказы НПС</h2>
-        <button onClick={() => mutate({ action: "refresh_orders" })} disabled={isPending}
-          className="flex items-center gap-1 text-xs font-bold text-primary hover:underline disabled:opacity-50">
-          <RefreshCw className="w-3 h-3" /> Обновить
+        <button
+          onClick={handleRefresh}
+          disabled={isPending || (!hasFreeRefresh && farm.gems < NPC_REFRESH_GEM_COST)}
+          className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border-b-2 transition-all active:translate-y-0.5 disabled:opacity-50
+            ${hasFreeRefresh
+              ? "bg-green-100 text-green-700 border-green-300"
+              : "bg-violet-100 text-violet-700 border-violet-300"
+            }`}
+        >
+          <RefreshCw className="w-3 h-3" />
+          {hasFreeRefresh
+            ? `Обновить (${refreshesLeft}/3)`
+            : `Обновить за 💎${NPC_REFRESH_GEM_COST}`
+          }
         </button>
       </div>
+
+      <p className="text-xs text-muted-foreground mb-4">
+        НПС платят <span className="font-bold text-amber-600">в 2.5× дороже</span>, чем просто продать
+        {!hasFreeRefresh && <> · <span className="text-violet-600">Бесплатные обновления закончились</span></>}
+      </p>
 
       <div className="flex flex-col gap-3">
         {farm.npcOrders.map((order) => (
@@ -108,7 +136,7 @@ export function MarketTab({ farm }: MarketTabProps) {
         ))}
       </div>
       <p className="text-xs text-muted-foreground text-center mt-4">
-        Заказы автоматически обновляются после выполнения всех
+        Заказы автоматически обновляются после выполнения всех · бесплатные обновления сбрасываются каждый день
       </p>
     </div>
   );

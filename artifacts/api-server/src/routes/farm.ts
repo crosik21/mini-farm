@@ -693,7 +693,7 @@ function generateNpcOrders(level: number): NpcOrder[] {
     const itemId = itemPool[Math.floor(Math.random() * itemPool.length)];
     const quantity = 1 + Math.floor(Math.random() * 3);
     const basePrice = (getActiveCropConfig()[itemId]?.sellPrice || PRODUCT_SELL_PRICE[itemId] || 10);
-    const rewardCoins = Math.floor(basePrice * quantity * 1.5);
+    const rewardCoins = Math.floor(basePrice * quantity * 2.5);
     const rewardXp = Math.floor(rewardCoins / 3);
 
     orders.push({
@@ -1853,7 +1853,25 @@ router.post("/:telegramId/action", async (req, res) => {
 
     // ── REFRESH ORDERS ─────────────────────────────────────────────────────────
     } else if (action === "refresh_orders") {
+      const todayKey = new Date().toISOString().slice(0, 10);
+      let npcRefreshesLeft: number = (farm.npcRefreshesLeft as number) ?? 3;
+      const npcRefreshesDate: string = (farm.npcRefreshesDate as string) ?? "";
+      // reset daily counter if date changed
+      if (npcRefreshesDate !== todayKey) npcRefreshesLeft = 3;
+
+      const { useGems } = req.body;
+      const NPC_REFRESH_GEM_COST = 5;
+
+      if (npcRefreshesLeft <= 0) {
+        if (!useGems) return res.status(400).json({ error: "Нет бесплатных обновлений. Используй гемы.", code: "NO_FREE_REFRESHES" });
+        if (gems < NPC_REFRESH_GEM_COST) return res.status(400).json({ error: "Недостаточно гемов" });
+        gems -= NPC_REFRESH_GEM_COST;
+      } else {
+        npcRefreshesLeft -= 1;
+      }
       npcOrders = generateNpcOrders(getLevelFromXp(xp));
+      await db.update(farmStateTable).set({ npcRefreshesLeft, npcRefreshesDate: todayKey }).where(eq(farmStateTable.telegramId, telegramId));
+      return res.json({ ...serializeFarm({ ...farm, plots, coins, gems, xp, level, energy, maxEnergy, animals, buildings, products, inventory, seeds, quests, npcOrders, items, activeSprinklers, worlds, activeWorldId, npcRefreshesLeft, npcRefreshesDate: todayKey }, telegramId), farmPass: serializeFarmPass(farmPassUS), achievements: buildAchievementsResponse(playerAchsUS) });
 
     // ── BUY ENERGY ─────────────────────────────────────────────────────────────
     } else if (action === "buy_energy") {
@@ -2570,6 +2588,12 @@ function serializeFarm(farm: any, telegramId: string) {
     pets: (farm.pets as PetsInventory) ?? { owned: [] },
     skillPoints: (farm.skillPoints as number) ?? 0,
     unlockedSkills: (farm.unlockedSkills as string[]) ?? [],
+    npcRefreshesLeft: (() => {
+      const todayKey = new Date().toISOString().slice(0, 10);
+      const storedDate = (farm.npcRefreshesDate as string) ?? "";
+      if (storedDate !== todayKey) return 3;
+      return (farm.npcRefreshesLeft as number) ?? 3;
+    })(),
     activeSkin: (farm.activeSkin as string) ?? "default",
     ownedSkins: (farm.ownedSkins as string[]) ?? [],
     totalPlaySeconds: (farm.totalPlaySeconds as number) ?? 0,

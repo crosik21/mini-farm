@@ -1,0 +1,8 @@
+[build]
+builder = "nixpacks"
+buildCommand = "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @workspace/mini-farm run build && pnpm --filter @workspace/api-server run build"
+
+[deploy]
+startCommand = "node --enable-source-maps ./artifacts/api-server/dist/index.mjs"
+healthcheckPath = "/api/healthz"
+healthcheckTimeout = 100
